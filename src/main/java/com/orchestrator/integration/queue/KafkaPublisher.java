@@ -17,19 +17,26 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class KafkaPublisher {
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final Map<String, KafkaTemplate<String, String>> kafkaTemplates;
 
-    public Map<String, Object> publish(QueueIntegrationConfig cfg, String message) {
+    public Map<String, Object> publish(String integrationId, QueueIntegrationConfig cfg, String message) {
         if (cfg.getTopic() == null || cfg.getTopic().isBlank())
-            throw new IntegrationExecutionException("Topic Kafka não definido");
+            throw new IntegrationExecutionException("Topic Kafka não definido para: " + integrationId);
 
-        log.info("[KAFKA] topic={} key={}", cfg.getTopic(), cfg.getKey());
+        KafkaTemplate<String, String> template = kafkaTemplates.get(integrationId);
+        if (template == null)
+            throw new IntegrationExecutionException(
+                    "Nenhuma configuração Kafka encontrada para o id '" + integrationId +
+                    "'. Verifique orch-integrations.kafkas no application.yml");
+
+        log.info("[KAFKA] id={} topic={} key={}", integrationId, cfg.getTopic(), cfg.getKey());
         try {
             CompletableFuture<SendResult<String, String>> future =
-                    kafkaTemplate.send(cfg.getTopic(), cfg.getKey(), message);
+                    template.send(cfg.getTopic(), cfg.getKey(), message);
             SendResult<String, String> result = future.get(10, TimeUnit.SECONDS);
             return Map.of(
                     "provider", "KAFKA",
+                    "integrationId", integrationId,
                     "topic", cfg.getTopic(),
                     "partition", result.getRecordMetadata().partition(),
                     "offset", result.getRecordMetadata().offset(),

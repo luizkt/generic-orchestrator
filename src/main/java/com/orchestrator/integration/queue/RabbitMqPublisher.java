@@ -1,6 +1,7 @@
 package com.orchestrator.integration.queue;
 
 import com.orchestrator.domain.model.QueueIntegrationConfig;
+import com.orchestrator.exception.IntegrationExecutionException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.MessageDeliveryMode;
@@ -14,18 +15,25 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class RabbitMqPublisher {
 
-    private final RabbitTemplate rabbitTemplate;
+    private final Map<String, RabbitTemplate> rabbitTemplates;
 
-    public Map<String, Object> publish(QueueIntegrationConfig cfg, String message) {
+    public Map<String, Object> publish(String integrationId, QueueIntegrationConfig cfg, String message) {
+        RabbitTemplate template = rabbitTemplates.get(integrationId);
+        if (template == null)
+            throw new IntegrationExecutionException(
+                    "Nenhuma configuração RabbitMQ encontrada para o id '" + integrationId +
+                    "'. Verifique orch-integrations.rabbitmqs no application.yml");
+
         String exchange = cfg.getExchange() != null ? cfg.getExchange() : "";
         String rk = cfg.getRoutingKey() != null ? cfg.getRoutingKey() : "";
 
-        log.info("[RABBITMQ] exchange={} routingKey={}", exchange, rk);
-        rabbitTemplate.convertAndSend(exchange, rk, message, m -> {
+        log.info("[RABBITMQ] id={} exchange={} routingKey={}", integrationId, exchange, rk);
+        template.convertAndSend(exchange, rk, message, m -> {
             m.getMessageProperties().setDeliveryMode(
                     cfg.isPersistente() ? MessageDeliveryMode.PERSISTENT : MessageDeliveryMode.NON_PERSISTENT);
             return m;
         });
-        return Map.of("provider", "RABBITMQ", "exchange", exchange, "routingKey", rk, "published", true);
+        return Map.of("provider", "RABBITMQ", "integrationId", integrationId,
+                "exchange", exchange, "routingKey", rk, "published", true);
     }
 }

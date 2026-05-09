@@ -2,7 +2,6 @@ package com.orchestrator.domain.model;
 import lombok.Data;
 @Data
 public class QueueIntegrationConfig {
-    private QueueProvider provider;
     // RabbitMQ
     private String exchange;
     private String routingKey;

@@ -30,18 +30,18 @@ public class QueueIntegrationExecutor implements IntegrationExecutor {
     public Object execute(IntegrationDefinition def, FlowExecutionContext ctx) {
         QueueIntegrationConfig q = def.getQueue();
         if (q == null) throw new IntegrationExecutionException("Configuração QUEUE ausente: " + def.getId());
-        if (q.getProvider() == null)
+        if (def.getProvider() == null)
             throw new IntegrationExecutionException("Provider de fila não definido para: " + def.getId());
 
         try {
             String message = templateResolver.resolve(q.getMensagemTemplate(), ctx);
-            return switch (q.getProvider()) {
-                case RABBITMQ -> rabbitMqPublisher.publish(q, message);
-                case KAFKA -> kafkaPublisher.publish(q, message);
+            return switch (def.getProvider()) {
+                case RABBITMQ -> rabbitMqPublisher.publish(def.getId(), q, message);
+                case KAFKA -> kafkaPublisher.publish(def.getId(), q, message);
                 case SQS -> sqsPublisher.publish(q, message);
             };
         } catch (Exception e) {
-            log.error("Erro QUEUE em '{}' ({}): {}", def.getId(), q.getProvider(), e.getMessage());
+            log.error("Erro QUEUE em '{}' ({}): {}", def.getId(), def.getProvider(), e.getMessage());
             throw new IntegrationExecutionException("Falha na integração QUEUE: " + def.getId(), e);
         }
     }

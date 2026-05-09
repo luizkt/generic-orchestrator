@@ -5,6 +5,7 @@ public class IntegrationDefinition {
     private String id;
     private int ordem;
     private IntegrationType tipo;
+    private QueueProvider provider;
     private String descricao;
     private boolean continuarEmErro;
     private HttpIntegrationConfig http;

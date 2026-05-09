@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@Document(collection = "flow_definitions")
+@Document(collection = "workflows")
 public class FlowDefinition {
     @Id private String mongoId;
     @JsonProperty("id") @Indexed private String flowId;

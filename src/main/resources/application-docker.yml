@@ -1,0 +1,34 @@
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/generic-orchestrator
+      database: generic-orchestrator
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+  kafka:
+    bootstrap-servers: localhost:9092
+
+orch-integrations:
+  rabbitmqs:
+    - id: rabbitmq-notifier
+      host: localhost
+      port: 5672
+      username: guest
+      password: guest
+  kafkas:
+    - id: kafka-user-tracking
+      bootstrap-servers: localhost:9092
+      producer:
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+orchestrator:
+  aws:
+    region: us-east-1
+    sqs:
+      endpoint: http://localhost:4566
+      access-key: test
+      secret-key: test
