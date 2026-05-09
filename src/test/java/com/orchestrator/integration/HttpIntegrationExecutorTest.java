@@ -1,6 +1,10 @@
 package com.orchestrator.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.orchestrator.config.HttpResilienceConfig;
+import com.orchestrator.config.properties.CircuitBreakerConfigurationProperties;
+import com.orchestrator.config.properties.OrchIntegrationsProperties;
+import com.orchestrator.config.properties.RetryConfigurationProperties;
 import com.orchestrator.domain.execution.FlowExecutionContext;
 import com.orchestrator.domain.model.HttpIntegrationConfig;
 import com.orchestrator.domain.model.IntegrationDefinition;
@@ -8,6 +12,8 @@ import com.orchestrator.domain.model.IntegrationType;
 import com.orchestrator.exception.IntegrationExecutionException;
 import com.orchestrator.integration.http.HttpIntegrationExecutor;
 import com.orchestrator.service.TemplateResolverService;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.retry.RetryRegistry;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
@@ -17,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,10 +38,17 @@ class HttpIntegrationExecutorTest {
     void setUp() throws IOException {
         mockWebServer = new MockWebServer();
         mockWebServer.start();
+
+        OrchIntegrationsProperties props = buildTestProperties();
+        HttpResilienceConfig resilienceConfig = new HttpResilienceConfig(props);
+
         executor = new HttpIntegrationExecutor(
                 WebClient.builder().build(),
                 new TemplateResolverService(),
-                new ObjectMapper());
+                new ObjectMapper(),
+                resilienceConfig.httpRetryRegistry(),
+                resilienceConfig.httpCircuitBreakerRegistry(),
+                props);
     }
 
     @AfterEach
@@ -49,33 +63,48 @@ class HttpIntegrationExecutorTest {
                 .setHeader("Content-Type", "application/json")
                 .setBody("{\"status\":\"ok\"}"));
 
-        IntegrationDefinition def = new IntegrationDefinition();
-        def.setId("test"); def.setTipo(IntegrationType.HTTP);
-        HttpIntegrationConfig http = new HttpIntegrationConfig();
-        http.setUrl(mockWebServer.url("/test").toString());
-        http.setMetodo("GET");
-        http.setTimeout(5000);
-        def.setHttp(http);
+        Object result = executor.execute(buildDef("GET", null, 5000), new FlowExecutionContext());
 
-        Object result = executor.execute(def, new FlowExecutionContext());
         assertThat(result).isInstanceOf(Map.class);
         assertThat(((Map<?, ?>) result)).containsEntry("status", "ok");
     }
 
-    @Test @DisplayName("Falha quando o servidor retorna erro 500")
-    void deveLancarErroEm5xx() {
+    @Test @DisplayName("Retry em status 500 e sucesso na terceira tentativa")
+    void deveRealizarRetryEm500ESuccederNaTerceiraTentativa() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500));
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500));
+        mockWebServer.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"recuperado\":true}"));
+
+        Object result = executor.execute(buildDef("GET", null, 5000), new FlowExecutionContext());
+
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(3);
+        assertThat(((Map<?, ?>) result)).containsEntry("recuperado", true);
+    }
+
+    @Test @DisplayName("Não realiza retry em status 404")
+    void naoRealizaRetryEm404() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(404));
+
+        assertThatThrownBy(() -> executor.execute(buildDef("GET", null, 5000), new FlowExecutionContext()))
+                .isInstanceOf(IntegrationExecutionException.class);
+
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(1);
+    }
+
+    @Test @DisplayName("Esgota tentativas em status 500 e lança IntegrationExecutionException")
+    void deveLancarErroAposEsgotarRetries() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500));
+        mockWebServer.enqueue(new MockResponse().setResponseCode(500));
         mockWebServer.enqueue(new MockResponse().setResponseCode(500));
 
-        IntegrationDefinition def = new IntegrationDefinition();
-        def.setId("test"); def.setTipo(IntegrationType.HTTP);
-        HttpIntegrationConfig http = new HttpIntegrationConfig();
-        http.setUrl(mockWebServer.url("/erro").toString());
-        http.setMetodo("GET");
-        http.setTimeout(2000);
-        def.setHttp(http);
+        assertThatThrownBy(() -> executor.execute(buildDef("GET", null, 5000), new FlowExecutionContext()))
+                .isInstanceOf(IntegrationExecutionException.class)
+                .hasMessageContaining("test-integration");
 
-        assertThatThrownBy(() -> executor.execute(def, new FlowExecutionContext()))
-                .isInstanceOf(IntegrationExecutionException.class);
+        assertThat(mockWebServer.getRequestCount()).isEqualTo(3);
     }
 
     @Test @DisplayName("Resolve placeholders na URL e body")
@@ -87,7 +116,8 @@ class HttpIntegrationExecutorTest {
         ctx.setContrato(Map.of("id", "123"));
 
         IntegrationDefinition def = new IntegrationDefinition();
-        def.setId("test"); def.setTipo(IntegrationType.HTTP);
+        def.setId("test-integration");
+        def.setTipo(IntegrationType.HTTP);
         HttpIntegrationConfig http = new HttpIntegrationConfig();
         http.setUrl(mockWebServer.url("/api/{{contrato.id}}").toString());
         http.setMetodo("POST");
@@ -97,8 +127,48 @@ class HttpIntegrationExecutorTest {
         def.setHttp(http);
 
         executor.execute(def, ctx);
+
         var request = mockWebServer.takeRequest();
         assertThat(request.getPath()).contains("123");
         assertThat(request.getBody().readUtf8()).contains("\"id\":\"123\"");
+    }
+
+    private IntegrationDefinition buildDef(String method, String bodyTemplate, long timeout) {
+        IntegrationDefinition def = new IntegrationDefinition();
+        def.setId("test-integration");
+        def.setTipo(IntegrationType.HTTP);
+
+        HttpIntegrationConfig http = new HttpIntegrationConfig();
+        http.setUrl(mockWebServer.url("/test").toString());
+        http.setMetodo(method);
+        http.setTimeout(timeout);
+        http.setBodyTemplate(bodyTemplate);
+        def.setHttp(http);
+        return def;
+    }
+
+    private OrchIntegrationsProperties buildTestProperties() {
+        RetryConfigurationProperties retry = new RetryConfigurationProperties();
+        retry.setMaximumAttempts(3);
+        retry.setDelay(10);
+        retry.setBackoffMultiplier(1.0);
+        retry.setMaximumDelay(100);
+        retry.setRetryableHttpCondition(List.of(500, 429, 408));
+        retry.setTimeout(5000);
+
+        CircuitBreakerConfigurationProperties cb = new CircuitBreakerConfigurationProperties();
+        cb.setSlidingWindowSize(10);
+        cb.setSlidingWindowSizeType("COUNT");
+        cb.setMinimumNumberCalls(100);
+        cb.setFailureRateThreshold(50);
+        cb.setWaitDurationOpenState(30);
+        cb.setPermittedCallsOpenState(3);
+        cb.setAutomaticTransitionHalfOpenEnabled(false);
+        cb.setSlowCallDurationThreshold(800);
+
+        OrchIntegrationsProperties props = new OrchIntegrationsProperties();
+        props.setRetryConfiguration(retry);
+        props.setCircuitBreakerConfiguration(cb);
+        return props;
     }
 }

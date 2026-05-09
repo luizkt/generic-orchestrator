@@ -24,6 +24,7 @@ repositories { mavenCentral() }
 extra["awsSdkVersion"] = "2.30.0"
 extra["jjwtVersion"] = "0.12.6"
 extra["testcontainersVersion"] = "1.20.4"
+extra["resilience4jVersion"] = "2.2.0"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
@@ -33,6 +34,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
     implementation("org.springframework.boot:spring-boot-starter-security")
+
+    // Resilience4j (retry + circuit breaker para integrações HTTP)
+    implementation("io.github.resilience4j:resilience4j-retry:${property("resilience4jVersion")}")
+    implementation("io.github.resilience4j:resilience4j-circuitbreaker:${property("resilience4jVersion")}")
 
     // Kafka
     implementation("org.springframework.kafka:spring-kafka")

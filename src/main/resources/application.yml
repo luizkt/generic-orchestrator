@@ -54,6 +54,25 @@ orch-integrations:
       producer:
         key-serializer: org.apache.kafka.common.serialization.StringSerializer
         value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  retry-configuration:
+    maximum-attempts: 3
+    delay: 100
+    backoff-multiplier: 2.0
+    maximum-delay: 10000
+    retryable-http-condition:
+      - 500
+      - 429
+      - 408
+    timeout: 1000
+  circuit-breaker-configuration:
+    sliding-window-size: 10
+    sliding-window-size-type: COUNT
+    minimum-number-calls: 100
+    failure-rate-threshold: 50
+    wait-duration-open-state: 30
+    permitted-calls-open-state: 10
+    automatic-transition-half-open-enabled: true
+    slow-call-duration-threshold: 800
 
 logging:
   level:

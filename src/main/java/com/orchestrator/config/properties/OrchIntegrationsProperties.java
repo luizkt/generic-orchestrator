@@ -12,4 +12,6 @@ public class OrchIntegrationsProperties {
 
     private List<KafkaIntegrationProperties> kafkas = new ArrayList<>();
     private List<RabbitMqIntegrationProperties> rabbitmqs = new ArrayList<>();
+    private RetryConfigurationProperties retryConfiguration = new RetryConfigurationProperties();
+    private CircuitBreakerConfigurationProperties circuitBreakerConfiguration = new CircuitBreakerConfigurationProperties();
 }
