@@ -1,0 +1,17 @@
+package com.orchestrator.domain.model;
+import lombok.Data;
+@Data
+public class QueueIntegrationConfig {
+    private QueueProvider provider;
+    // RabbitMQ
+    private String exchange;
+    private String routingKey;
+    private boolean persistente;
+    // Kafka
+    private String topic;
+    private String key;
+    // SQS
+    private String queueUrl;
+    // Comum
+    private String mensagemTemplate;
+}

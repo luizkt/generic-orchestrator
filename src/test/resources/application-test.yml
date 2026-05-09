@@ -1,0 +1,19 @@
+spring:
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/orchestrator-test
+  rabbitmq:
+    host: localhost
+    port: 5672
+
+orchestrator:
+  http-client:
+    connect-timeout: 2000
+    read-timeout: 5000
+  security:
+    jwt:
+      secret: TEST_SECRET_AT_LEAST_64_CHARS_LONG_TEST_SECRET_AT_LEAST_64_CHARS_LONG
+      expiration-seconds: 3600
+      issuer: generic-orchestrator-test
+  aws:
+    region: us-east-1

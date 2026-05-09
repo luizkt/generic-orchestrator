@@ -1,0 +1,78 @@
+fluxo:
+  id: "criar-pedido-v1"
+  descricao: "Fluxo de criação de pedido"
+  versao: "1.0.0"
+  ativo: true
+
+  contrato:
+    campos:
+      - nome: "clienteId"
+        tipo: STRING
+        obrigatorio: true
+        validacoes:
+          - tipo: NOT_BLANK
+          - tipo: PATTERN
+            valor: "^[A-Z0-9]{6,20}$"
+            mensagem: "clienteId inválido"
+      - nome: "valor"
+        tipo: DECIMAL
+        obrigatorio: true
+        validacoes:
+          - tipo: POSITIVE
+
+  integracoes:
+    - id: "validar-cliente"
+      ordem: 1
+      tipo: HTTP
+      continuarEmErro: false
+      http:
+        url: "https://api.exemplo.com/clientes/{{contrato.clienteId}}"
+        metodo: GET
+        headers:
+          Content-Type: "application/json"
+        timeout: 5000
+
+    - id: "salvar-pedido"
+      ordem: 2
+      tipo: DATABASE
+      continuarEmErro: false
+      database:
+        operacao: INSERT
+        colecao: "pedidos"
+        documentoTemplate: |
+          {"clienteId":"{{contrato.clienteId}}","valor":"{{contrato.valor}}","status":"CRIADO"}
+        mapeamentoResposta:
+          campoDestino: "pedidoId"
+          campoOrigem: "_id"
+
+    - id: "notificar-rabbit"
+      ordem: 3
+      tipo: QUEUE
+      continuarEmErro: true
+      queue:
+        provider: RABBITMQ
+        exchange: "pedidos.exchange"
+        routingKey: "pedido.criado"
+        mensagemTemplate: |
+          {"evento":"PEDIDO_CRIADO","pedidoId":"{{integracoes.salvar-pedido.pedidoId}}"}
+        persistente: true
+
+    - id: "notificar-kafka"
+      ordem: 4
+      tipo: QUEUE
+      continuarEmErro: true
+      queue:
+        provider: KAFKA
+        topic: "pedidos.criados"
+        mensagemTemplate: |
+          {"pedidoId":"{{integracoes.salvar-pedido.pedidoId}}"}
+
+    - id: "notificar-sqs"
+      ordem: 5
+      tipo: QUEUE
+      continuarEmErro: true
+      queue:
+        provider: SQS
+        queueUrl: "https://sqs.us-east-1.amazonaws.com/123/pedidos"
+        mensagemTemplate: |
+          {"pedidoId":"{{integracoes.salvar-pedido.pedidoId}}"}
