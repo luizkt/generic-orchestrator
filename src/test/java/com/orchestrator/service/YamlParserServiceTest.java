@@ -90,7 +90,7 @@ class YamlParserServiceTest {
     }
 
     @Test
-    @DisplayName("Deve parsear YAML com QueueProvider Kafka")
+    @DisplayName("Deve parsear YAML com provider Kafka no nível principal da integração")
     void deveParsearComKafka() {
         String yaml = """
             fluxo:
@@ -101,12 +101,12 @@ class YamlParserServiceTest {
                 - id: "k1"
                   ordem: 1
                   tipo: QUEUE
+                  provider: KAFKA
                   queue:
-                    provider: KAFKA
                     topic: "events"
             """;
         FlowDefinition d = service.parse(yaml);
-        assertThat(d.getIntegracoes().get(0).getQueue().getProvider().name()).isEqualTo("KAFKA");
+        assertThat(d.getIntegracoes().get(0).getProvider().name()).isEqualTo("KAFKA");
         assertThat(d.getIntegracoes().get(0).getQueue().getTopic()).isEqualTo("events");
     }
 }

@@ -26,10 +26,9 @@ class QueueIntegrationIT extends AbstractIntegrationTest {
     @Test @DisplayName("Publica mensagem no Kafka via Testcontainers")
     void devePublicarKafka() {
         QueueIntegrationConfig cfg = new QueueIntegrationConfig();
-        cfg.setProvider(QueueProvider.KAFKA);
         cfg.setTopic("test-topic-it");
 
-        Map<String, Object> result = kafkaPublisher.publish(cfg, "{\"hello\":\"kafka\"}");
+        Map<String, Object> result = kafkaPublisher.publish("kafka-user-tracking", cfg, "{\"hello\":\"kafka\"}");
         assertThat(result).containsEntry("provider", "KAFKA");
         assertThat(result).containsEntry("published", true);
         assertThat(result).containsKey("offset");
@@ -40,7 +39,6 @@ class QueueIntegrationIT extends AbstractIntegrationTest {
         var queue = sqsClient.createQueue(CreateQueueRequest.builder().queueName("test-it-q").build());
 
         QueueIntegrationConfig cfg = new QueueIntegrationConfig();
-        cfg.setProvider(QueueProvider.SQS);
         cfg.setQueueUrl(queue.queueUrl());
 
         Map<String, Object> result = sqsPublisher.publish(cfg, "{\"hello\":\"sqs\"}");
@@ -56,10 +54,10 @@ class QueueIntegrationIT extends AbstractIntegrationTest {
     @Test @DisplayName("Executor genérico delega para Kafka quando provider = KAFKA")
     void executorDelegaKafka() {
         IntegrationDefinition def = new IntegrationDefinition();
-        def.setId("k1");
+        def.setId("kafka-user-tracking");
         def.setTipo(IntegrationType.QUEUE);
+        def.setProvider(QueueProvider.KAFKA);
         QueueIntegrationConfig cfg = new QueueIntegrationConfig();
-        cfg.setProvider(QueueProvider.KAFKA);
         cfg.setTopic("delegated-topic");
         cfg.setMensagemTemplate("{\"id\":\"{{contrato.id}}\"}");
         def.setQueue(cfg);

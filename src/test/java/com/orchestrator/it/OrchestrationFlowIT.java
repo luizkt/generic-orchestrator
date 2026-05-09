@@ -48,7 +48,7 @@ class OrchestrationFlowIT extends AbstractIntegrationTest {
 
         flowDefinitionService.save(yaml);
 
-        FlowExecutionResult result = orchestrationService.execute("it-flow", Map.of("nome", "Teste"));
+        FlowExecutionResult result = orchestrationService.execute("1.0.0", "it-flow", Map.of("nome", "Teste"));
 
         assertThat(result.getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(result.getResultado()).containsKey("salvar");
@@ -59,6 +59,7 @@ class OrchestrationFlowIT extends AbstractIntegrationTest {
         String yaml = """
             fluxo:
               id: "it-flow-validation"
+              versao: "1.0.0"
               ativo: true
               contrato:
                 campos:
@@ -77,7 +78,7 @@ class OrchestrationFlowIT extends AbstractIntegrationTest {
 
         flowDefinitionService.save(yaml);
 
-        FlowExecutionResult result = orchestrationService.execute("it-flow-validation", Map.of());
+        FlowExecutionResult result = orchestrationService.execute("1.0.0", "it-flow-validation", Map.of());
 
         assertThat(result.getStatus()).isEqualTo(ExecutionStatus.FAILED);
         assertThat(result.getErrorMessage()).contains("obrigatorio");

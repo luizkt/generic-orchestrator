@@ -7,5 +7,6 @@ import java.util.Optional;
 @Repository
 public interface FlowDefinitionRepository extends MongoRepository<FlowDefinition, String> {
     Optional<FlowDefinition> findByFlowIdAndAtivoTrue(String flowId);
+    Optional<FlowDefinition> findByFlowIdAndVersaoAndAtivoTrue(String flowId, String versao);
     boolean existsByFlowId(String flowId);
 }

@@ -43,5 +43,13 @@ public abstract class AbstractIntegrationTest {
                 LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.SQS).toString());
         r.add("orchestrator.aws.sqs.access-key", LOCALSTACK::getAccessKey);
         r.add("orchestrator.aws.sqs.secret-key", LOCALSTACK::getSecretKey);
+
+        r.add("orch-integrations.kafkas[0].id", () -> "kafka-user-tracking");
+        r.add("orch-integrations.kafkas[0].bootstrap-servers", KAFKA::getBootstrapServers);
+        r.add("orch-integrations.rabbitmqs[0].id", () -> "rabbitmq-notifier");
+        r.add("orch-integrations.rabbitmqs[0].host", RABBIT::getHost);
+        r.add("orch-integrations.rabbitmqs[0].port", () -> String.valueOf(RABBIT.getAmqpPort()));
+        r.add("orch-integrations.rabbitmqs[0].username", RABBIT::getAdminUsername);
+        r.add("orch-integrations.rabbitmqs[0].password", RABBIT::getAdminPassword);
     }
 }

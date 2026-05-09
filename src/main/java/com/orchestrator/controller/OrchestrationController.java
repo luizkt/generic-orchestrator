@@ -16,10 +16,11 @@ public class OrchestrationController {
 
     private final OrchestrationService orchestrationService;
 
-    @PostMapping("/{flowId}")
-    public ResponseEntity<OrchestrationResponse> orchestrate(@PathVariable String flowId,
+    @PostMapping("/{version}/{flowId}")
+    public ResponseEntity<OrchestrationResponse> orchestrate(@PathVariable String version,
+                                                             @PathVariable String flowId,
                                                              @RequestBody Map<String, Object> payload) {
-        FlowExecutionResult r = orchestrationService.execute(flowId, payload);
+        FlowExecutionResult r = orchestrationService.execute(version, flowId, payload);
         return ResponseEntity.ok(OrchestrationResponse.builder()
                 .executionId(r.getExecutionId())
                 .flowId(r.getFlowId())

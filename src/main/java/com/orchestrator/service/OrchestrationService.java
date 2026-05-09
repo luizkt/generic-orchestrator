@@ -25,7 +25,7 @@ public class OrchestrationService {
     private final ContractValidationService contractValidationService;
     private final IntegrationExecutorFactory executorFactory;
 
-    public FlowExecutionResult execute(String flowId, Map<String, Object> payload) {
+    public FlowExecutionResult execute(String versao, String flowId, Map<String, Object> payload) {
         FlowExecutionContext ctx = new FlowExecutionContext();
         ctx.setExecutionId(UUID.randomUUID().toString());
         ctx.setFlowId(flowId);
@@ -33,10 +33,10 @@ public class OrchestrationService {
         ctx.setStatus(ExecutionStatus.RUNNING);
         ctx.setContrato(payload != null ? payload : Map.of());
 
-        log.info("Iniciando execução [{}] do fluxo: {}", ctx.getExecutionId(), flowId);
+        log.info("Iniciando execução [{}] do fluxo: {} versao: {}", ctx.getExecutionId(), flowId, versao);
 
         try {
-            FlowDefinition def = flowDefinitionService.findActiveByFlowId(flowId);
+            FlowDefinition def = flowDefinitionService.findActiveByFlowIdAndVersion(flowId, versao);
             contractValidationService.validate(def.getContrato(), ctx.getContrato());
 
             boolean teveErro = false;

@@ -68,4 +68,26 @@ class FlowDefinitionServiceTest {
         assertThat(sample.isAtivo()).isFalse();
         verify(repository).save(sample);
     }
+
+    @Test @DisplayName("Busca fluxo ativo por id e versao")
+    void deveBuscarFluxoAtivoPorIdEVersao() {
+        when(repository.findByFlowIdAndVersaoAndAtivoTrue("test-flow", "1.0.0"))
+                .thenReturn(Optional.of(sample));
+
+        FlowDefinition found = service.findActiveByFlowIdAndVersion("test-flow", "1.0.0");
+
+        assertThat(found).isEqualTo(sample);
+        assertThat(found.getVersao()).isEqualTo("1.0.0");
+    }
+
+    @Test @DisplayName("Lança exceção quando versão do fluxo não encontrada")
+    void deveLancarQuandoVersaoNaoEncontrada() {
+        when(repository.findByFlowIdAndVersaoAndAtivoTrue("test-flow", "2.0.0"))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.findActiveByFlowIdAndVersion("test-flow", "2.0.0"))
+                .isInstanceOf(FlowNotFoundException.class)
+                .hasMessageContaining("test-flow")
+                .hasMessageContaining("2.0.0");
+    }
 }

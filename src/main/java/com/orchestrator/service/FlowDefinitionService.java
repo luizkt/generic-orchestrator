@@ -30,6 +30,12 @@ public class FlowDefinitionService {
                 .orElseThrow(() -> new FlowNotFoundException("Fluxo ativo não encontrado: " + flowId));
     }
 
+    public FlowDefinition findActiveByFlowIdAndVersion(String flowId, String versao) {
+        return repository.findByFlowIdAndVersaoAndAtivoTrue(flowId, versao)
+                .orElseThrow(() -> new FlowNotFoundException(
+                        "Fluxo ativo não encontrado: id=" + flowId + ", versao=" + versao));
+    }
+
     public FlowDefinition update(String flowId, String yaml) {
         FlowDefinition existing = findActiveByFlowId(flowId);
         FlowDefinition updated = yamlParserService.parse(yaml);
