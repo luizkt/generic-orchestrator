@@ -5,6 +5,7 @@ import com.orchestrator.domain.execution.FlowExecutionResult;
 import com.orchestrator.domain.model.*;
 import com.orchestrator.integration.IntegrationExecutor;
 import com.orchestrator.integration.IntegrationExecutorFactory;
+import com.orchestrator.manager.WorkflowCacheService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class OrchestrationServiceTest {
 
-    @Mock private FlowDefinitionService flowDefinitionService;
+    @Mock private WorkflowCacheService workflowCacheService;
     @Mock private ContractValidationService contractValidationService;
     @Mock private IntegrationExecutorFactory executorFactory;
     @Mock private IntegrationExecutor httpExecutor;
@@ -49,9 +50,9 @@ class OrchestrationServiceTest {
         flow.setIntegracoes(List.of(integration));
     }
 
-    @Test @DisplayName("Executa fluxo com sucesso")
+    @Test @DisplayName("Executa fluxo com sucesso (load via WorkflowCacheService)")
     void deveExecutarFluxoComSucesso() {
-        when(flowDefinitionService.findActiveByFlowIdAndVersion("test-flow", "1.0.0")).thenReturn(flow);
+        when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
         when(executorFactory.get(IntegrationType.HTTP)).thenReturn(httpExecutor);
         when(httpExecutor.execute(any(), any())).thenReturn(Map.of("ok", true));
 
@@ -59,13 +60,14 @@ class OrchestrationServiceTest {
 
         assertThat(result.getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(result.getResultado()).containsKey("step-1");
+        verify(workflowCacheService).load("test-flow", "1.0.0");
         verify(contractValidationService).validate(any(), any());
     }
 
     @Test @DisplayName("Retorna FAILED quando integração obrigatória falha")
     void deveFalharQuandoIntegracaoObrigatoriaFalha() {
         integration.setContinuarEmErro(false);
-        when(flowDefinitionService.findActiveByFlowIdAndVersion("test-flow", "1.0.0")).thenReturn(flow);
+        when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
         when(executorFactory.get(IntegrationType.HTTP)).thenReturn(httpExecutor);
         when(httpExecutor.execute(any(), any())).thenThrow(new RuntimeException("erro"));
 
@@ -76,7 +78,7 @@ class OrchestrationServiceTest {
     @Test @DisplayName("Retorna PARTIAL_SUCCESS quando integração não-obrigatória falha")
     void devePartialSuccessQuandoOpcionalFalha() {
         integration.setContinuarEmErro(true);
-        when(flowDefinitionService.findActiveByFlowIdAndVersion("test-flow", "1.0.0")).thenReturn(flow);
+        when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
         when(executorFactory.get(IntegrationType.HTTP)).thenReturn(httpExecutor);
         when(httpExecutor.execute(any(), any())).thenThrow(new RuntimeException("erro"));
 
@@ -94,7 +96,7 @@ class OrchestrationServiceTest {
         i0.setHttp(new HttpIntegrationConfig());
         flow.setIntegracoes(List.of(i2, integration, i0));
 
-        when(flowDefinitionService.findActiveByFlowIdAndVersion("test-flow", "1.0.0")).thenReturn(flow);
+        when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
         when(executorFactory.get(IntegrationType.HTTP)).thenReturn(httpExecutor);
         when(httpExecutor.execute(any(), any())).thenReturn(Map.of("ok", true));
 
@@ -103,9 +105,9 @@ class OrchestrationServiceTest {
         assertThat(r.getResultado()).containsKeys("step-0", "step-1", "step-2");
     }
 
-    @Test @DisplayName("Retorna FAILED quando versão não encontrada")
+    @Test @DisplayName("Retorna FAILED quando versão não encontrada (cache miss + Manager 404)")
     void deveFalharQuandoVersaoNaoEncontrada() {
-        when(flowDefinitionService.findActiveByFlowIdAndVersion("test-flow", "9.9.9"))
+        when(workflowCacheService.load("test-flow", "9.9.9"))
                 .thenThrow(new com.orchestrator.exception.FlowNotFoundException("Não encontrado"));
 
         FlowExecutionResult r = service.execute("9.9.9", "test-flow", Map.of());

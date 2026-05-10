@@ -1,5 +1,13 @@
 package com.orchestrator.dto;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
-@Data @AllArgsConstructor
-public class LoginResponse { private String token; private String type; }
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class LoginResponse {
+    private String token;
+    private String type;
+}

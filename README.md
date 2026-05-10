@@ -25,6 +25,7 @@ Define e executa fluxos de orquestração declarados em YAML, armazenados no Mon
 | Segurança | Spring Security + JWT HS512 (jjwt 0.12.6) |
 | HTTP client | Spring WebFlux WebClient (Netty) |
 | Resiliência | Resilience4j 2.2 (retry + circuit breaker) |
+| Cache | Spring Cache + Redis (Lettuce) — workflows ativos com TTL 1h |
 
 ---
 
@@ -37,14 +38,23 @@ src/main/java/com/orchestrator/
 │   │   ├── OrchIntegrationsProperties.java        # @ConfigurationProperties("orch-integrations")
 │   │   ├── KafkaIntegrationProperties.java        # Config de uma instância Kafka
 │   │   ├── RabbitMqIntegrationProperties.java     # Config de uma instância RabbitMQ
+│   │   ├── ManagerProperties.java                 # @ConfigurationProperties("orchestrator.manager")
 │   │   ├── RetryConfigurationProperties.java      # Backoff, tentativas e status retryáveis
 │   │   └── CircuitBreakerConfigurationProperties.java
 │   ├── KafkaMultiInstanceConfig.java              # Cria Map<id, KafkaTemplate>
 │   ├── RabbitMqMultiInstanceConfig.java           # Cria Map<id, RabbitTemplate>
 │   ├── HttpResilienceConfig.java                  # RetryRegistry + CircuitBreakerRegistry
+│   ├── ManagerWebClientConfig.java                # WebClient dedicado para o Manager
+│   ├── RedisCacheConfig.java                      # @EnableCaching + RedisCacheManager TTL 1h
 │   ├── SqsConfig.java
 │   ├── WebClientConfig.java
 │   └── JacksonConfig.java
+├── manager/                                       # Integração com service-portal-manager
+│   ├── ManagerAuthService.java                    # Login server-to-server + cache de token
+│   ├── ManagerWorkflowClient.java                 # GET /manager/workflows/active e .../yaml
+│   ├── WorkflowSummary.java                       # DTO da lista de ativos
+│   ├── WorkflowCacheService.java                  # @Cacheable: cache miss → Manager → parse
+│   └── WorkflowCacheWarmer.java                   # @ApplicationReadyEvent: popula o Redis
 ├── exception/
 │   └── RetriableHttpException.java                # Sinaliza status retryáveis (500, 429, 408)
 ├── domain/
@@ -85,6 +95,27 @@ spring:
     port: ${RABBITMQ_PORT:5672}
   kafka:                             # Usado pelo Spring Kafka (autoconfigure)
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+spring:
+  data:
+    redis:                             # Cache de workflows
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+  cache:
+    type: redis
+
+orchestrator:
+  manager:                             # Service Portal Manager — fonte dos workflows
+    base-url: ${MANAGER_URL:http://localhost:8082}
+    username: ${MANAGER_USERNAME:admin}
+    password: ${MANAGER_PASSWORD:admin}
+    timeout-ms: ${MANAGER_TIMEOUT_MS:5000}
+  cache:
+    workflows:
+      ttl-seconds: ${WORKFLOWS_CACHE_TTL_SECONDS:3600}
+      warm-up-enabled: ${WORKFLOWS_WARM_UP_ENABLED:true}
 
 orch-integrations:                   # Configuração multi-instância dos brokers
   rabbitmqs:
@@ -132,6 +163,39 @@ O orquestrador suporta múltiplas instâncias de Kafka e RabbitMQ configuradas s
 
 - O `id` da integração no YAML do workflow deve corresponder ao `id` configurado em `orch-integrations.kafkas` ou `orch-integrations.rabbitmqs`.
 - Se nenhuma configuração for encontrada para o `id`, a execução falha com mensagem clara indicando qual `id` está ausente.
+
+### Cache de workflows (Redis) + integração com Manager
+
+Workflows não são mais armazenados localmente — o orquestrador **consome** do `service-portal-manager` (porta 8082):
+
+```
+[startup]                                 [execução]
+  ┌──────────────────────┐                  ┌─────────────────────────┐
+  │ WorkflowCacheWarmer  │                  │ POST /api/orchestrate.. │
+  │ ApplicationReadyEvt  │                  │       │                 │
+  └─────────┬────────────┘                  │       ▼                 │
+            │                               │ WorkflowCacheService    │
+            ▼                               │   .load(flowId, versao) │
+  ┌──────────────────────┐                  │       │                 │
+  │ Manager              │                  │       ▼                 │
+  │ /workflows/active    │                  │   Redis lookup          │
+  │ → para cada ativo:   │                  │       │                 │
+  │   .load(id, ver)     │                  │ HIT? ─yes→ FlowDefinition│
+  └─────────┬────────────┘                  │   no                    │
+            │                               │       ▼                 │
+            ▼                               │ Manager /yaml + parse   │
+  ┌──────────────────────┐                  │       │                 │
+  │ Redis populado       │                  │       ▼                 │
+  └──────────────────────┘                  │ Cacheia + executa       │
+                                            └─────────────────────────┘
+```
+
+- **Cache key**: `workflows::{flowId}_{versao}` (Spring Cache + Redis serialização Jackson)
+- **TTL**: 1h por padrão (configurável via `orchestrator.cache.workflows.ttl-seconds`)
+- **Conteúdo cacheado**: `FlowDefinition` parseado (não o YAML cru) — economiza CPU em execuções repetidas
+- **Invalidação**: somente por TTL. Se um workflow for atualizado no Manager, o orquestrador pode usar versão obsoleta por até 1h. Para invalidar manualmente, usar `WorkflowCacheService.evict(flowId, versao)` ou `evictAll()`
+- **Warm-up**: opcional via `orchestrator.cache.workflows.warm-up-enabled` (default `true`). Se desabilitado ou se o Manager estiver indisponível na inicialização, o orquestrador faz lazy-load no primeiro request — não bloqueia o startup
+- **Falhas**: cache miss + Manager 404 → `FlowNotFoundException` no fluxo de execução; cache miss + Manager 5xx → `WebClientResponseException` propagado
 
 ### Resiliência HTTP — Retry + Circuit Breaker (Resilience4j)
 
@@ -183,11 +247,13 @@ Sobe os serviços:
 
 | Serviço | Porta | Descrição |
 |---|---|---|
-| MongoDB 7 | 27017 | Armazenamento dos workflows |
+| MongoDB 7 | 27017 | Persistência (DatabaseIntegrationExecutor + collection `workflows` gerenciada pelo Manager) |
+| **Redis 7** | 6379 | Cache de workflows ativos do orquestrador (TTL 1h) |
 | RabbitMQ 3 | 5672 / 15672 | Broker + Management UI |
 | Kafka (Bitnami 3.7, KRaft) | 9092 | Broker |
 | LocalStack 3 (opcional) | 4566 | Emulador AWS SQS |
 | **WireMock** | **18080** (admin/host) | Simulador de APIs HTTP externas — alias `api.exemplo.com` na rede `portal` |
+| **service-portal-manager** | 8082 | Dono da collection `workflows` — fonte de YAML para o orquestrador |
 
 ### WireMock — APIs externas simuladas
 
@@ -249,16 +315,15 @@ curl -X POST http://localhost:8080/api/auth/login \
 
 ### Endpoints
 
+> **Atenção:** após o refactor para o `service-portal-manager`, **CRUD de fluxos saiu do orquestrador.** O orquestrador agora só executa — gerenciamento (POST/GET/PUT/DELETE) acontece no Manager (porta 8082).
+
 | Método | Endpoint | Descrição |
 |---|---|---|
-| POST | `/api/auth/login` | Gera token JWT |
-| GET | `/api/flows` | Lista fluxos ativos |
-| POST | `/api/flows` | Cadastra fluxo (corpo: YAML) |
-| GET | `/api/flows/{flowId}` | Busca fluxo ativo |
-| PUT | `/api/flows/{flowId}` | Atualiza fluxo |
-| DELETE | `/api/flows/{flowId}` | Desativa fluxo |
-| POST | `/api/orchestrate/{version}/{flowId}` | Executa fluxo com payload JSON (`version` no path — match em `id` + `versao` no Mongo) |
-| GET | `/actuator/health` | Health check |
+| POST | `/api/auth/login` | Gera token JWT (server-to-server) |
+| POST | `/api/orchestrate/{version}/{flowId}` | Executa fluxo com payload JSON. Carrega o `FlowDefinition` via Redis cache (cache miss → consulta Manager) |
+| GET | `/actuator/health` | Health check (público) |
+
+Para criar/atualizar/listar fluxos, ver [`service-portal-manager/README.md`](../service-portal-manager/README.md).
 
 ---
 

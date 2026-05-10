@@ -5,6 +5,13 @@ spring:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/generic-orchestrator}
       database: ${MONGODB_DATABASE:generic-orchestrator}
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT_MS:2000}ms
+  cache:
+    type: redis
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -25,6 +32,15 @@ orchestrator:
       secret: ${JWT_SECRET:CHANGE_ME_PLEASE_THIS_IS_A_DEV_ONLY_SECRET_AT_LEAST_64_CHARS_LONG_FOR_HS512}
       expiration-seconds: ${JWT_EXPIRATION:3600}
       issuer: ${JWT_ISSUER:generic-orchestrator}
+  manager:
+    base-url: ${MANAGER_URL:http://localhost:8082}
+    username: ${MANAGER_USERNAME:admin}
+    password: ${MANAGER_PASSWORD:admin}
+    timeout-ms: ${MANAGER_TIMEOUT_MS:5000}
+  cache:
+    workflows:
+      ttl-seconds: ${WORKFLOWS_CACHE_TTL_SECONDS:3600}
+      warm-up-enabled: ${WORKFLOWS_WARM_UP_ENABLED:true}
   aws:
     region: ${AWS_REGION:us-east-1}
     sqs:

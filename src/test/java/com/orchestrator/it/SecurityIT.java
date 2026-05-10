@@ -24,7 +24,11 @@ class SecurityIT extends AbstractIntegrationTest {
 
     @Test @DisplayName("Endpoint protegido sem token retorna 401")
     void deveBloquearSemToken() throws Exception {
-        mockMvc.perform(get("/api/flows/qualquer"))
+        // /api/orchestrate é o único endpoint protegido restante após o
+        // refactor — CRUD de flows migrou para o service-portal-manager.
+        mockMvc.perform(post("/api/orchestrate/v1/qualquer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -70,9 +74,12 @@ class SecurityIT extends AbstractIntegrationTest {
         LoginResponse resp = objectMapper.readValue(
                 loginResult.getResponse().getContentAsString(), LoginResponse.class);
 
-        // O fluxo não existe, mas como passou na auth deve retornar 404 (não 401).
-        mockMvc.perform(get("/api/flows/inexistente")
+        // O fluxo não existe, mas como passou na auth o resultado de execução
+        // sai como FAILED (HTTP 200 com erro embutido), nunca 401.
+        mockMvc.perform(post("/api/orchestrate/v1/inexistente")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}")
                         .header("Authorization", "Bearer " + resp.getToken()))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk());
     }
 }

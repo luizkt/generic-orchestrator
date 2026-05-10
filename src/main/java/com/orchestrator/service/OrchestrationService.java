@@ -7,6 +7,7 @@ import com.orchestrator.domain.model.FlowDefinition;
 import com.orchestrator.domain.model.IntegrationDefinition;
 import com.orchestrator.exception.IntegrationExecutionException;
 import com.orchestrator.integration.IntegrationExecutorFactory;
+import com.orchestrator.manager.WorkflowCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,7 +22,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class OrchestrationService {
 
-    private final FlowDefinitionService flowDefinitionService;
+    private final WorkflowCacheService workflowCacheService;
     private final ContractValidationService contractValidationService;
     private final IntegrationExecutorFactory executorFactory;
 
@@ -36,7 +37,7 @@ public class OrchestrationService {
         log.info("Iniciando execução [{}] do fluxo: {} versao: {}", ctx.getExecutionId(), flowId, versao);
 
         try {
-            FlowDefinition def = flowDefinitionService.findActiveByFlowIdAndVersion(flowId, versao);
+            FlowDefinition def = workflowCacheService.load(flowId, versao);
             contractValidationService.validate(def.getContrato(), ctx.getContrato());
 
             boolean teveErro = false;

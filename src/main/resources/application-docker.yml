@@ -1,34 +1,45 @@
 spring:
   data:
     mongodb:
-      uri: mongodb://localhost:27017/generic-orchestrator
+      uri: mongodb://mongodb:27017/generic-orchestrator
       database: generic-orchestrator
+    redis:
+      host: redis
+      port: 6379
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+  cache:
+    type: redis
   rabbitmq:
-    host: localhost
+    host: rabbitmq
     port: 5672
-    username: guest
-    password: guest
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: kafka:9092
 
 orch-integrations:
   rabbitmqs:
     - id: rabbitmq-notifier
-      host: localhost
+      host: rabbitmq
       port: 5672
-      username: guest
-      password: guest
+      username: ${RABBITMQ_USERNAME:guest}
+      password: ${RABBITMQ_PASSWORD:guest}
   kafkas:
     - id: kafka-user-tracking
-      bootstrap-servers: localhost:9092
+      bootstrap-servers: kafka:9092
       producer:
         key-serializer: org.apache.kafka.common.serialization.StringSerializer
         value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 orchestrator:
+  manager:
+    base-url: http://manager:8082
+    username: ${MANAGER_USERNAME:admin}
+    password: ${MANAGER_PASSWORD:admin}
   aws:
     region: us-east-1
     sqs:
-      endpoint: http://localhost:4566
+      endpoint: http://localstack:4566
       access-key: test
       secret-key: test

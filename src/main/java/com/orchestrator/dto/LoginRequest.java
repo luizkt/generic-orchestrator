@@ -1,3 +1,13 @@
 package com.orchestrator.dto;
+
+import lombok.AllArgsConstructor;
 import lombok.Data;
-@Data public class LoginRequest { private String username; private String password; }
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class LoginRequest {
+    private String username;
+    private String password;
+}

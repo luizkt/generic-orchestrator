@@ -4,6 +4,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.RabbitMQContainer;
@@ -22,17 +23,23 @@ public abstract class AbstractIntegrationTest {
     static final LocalStackContainer LOCALSTACK = new LocalStackContainer(
             DockerImageName.parse("localstack/localstack:3"))
             .withServices(LocalStackContainer.Service.SQS);
+    @SuppressWarnings("resource")
+    static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
+            .withExposedPorts(6379);
 
     static {
         MONGO.start();
         RABBIT.start();
         KAFKA.start();
         LOCALSTACK.start();
+        REDIS.start();
     }
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry r) {
         r.add("spring.data.mongodb.uri", MONGO::getReplicaSetUrl);
+        r.add("spring.data.redis.host", REDIS::getHost);
+        r.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         r.add("spring.rabbitmq.host", RABBIT::getHost);
         r.add("spring.rabbitmq.port", RABBIT::getAmqpPort);
         r.add("spring.rabbitmq.username", RABBIT::getAdminUsername);
@@ -51,5 +58,13 @@ public abstract class AbstractIntegrationTest {
         r.add("orch-integrations.rabbitmqs[0].port", () -> String.valueOf(RABBIT.getAmqpPort()));
         r.add("orch-integrations.rabbitmqs[0].username", RABBIT::getAdminUsername);
         r.add("orch-integrations.rabbitmqs[0].password", RABBIT::getAdminPassword);
+
+        // Manager: URL placeholder — testes não chamam o Manager. Warm-up
+        // desabilitado e WorkflowCacheService é mockado quando preciso (vide
+        // OrchestrationServiceTest). SecurityIT não toca em fluxos.
+        r.add("orchestrator.manager.base-url", () -> "http://localhost:1");
+        r.add("orchestrator.manager.username", () -> "admin");
+        r.add("orchestrator.manager.password", () -> "admin");
+        r.add("orchestrator.cache.workflows.warm-up-enabled", () -> "false");
     }
 }

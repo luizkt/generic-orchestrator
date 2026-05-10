@@ -30,6 +30,8 @@ extra["resilience4jVersion"] = "2.2.0"
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-amqp")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -65,7 +67,6 @@ dependencies {
     testImplementation("org.springframework.kafka:spring-kafka-test")
     testImplementation("org.springframework.amqp:spring-rabbit-test")
     testImplementation("io.projectreactor:reactor-test")
-    testImplementation("de.flapdoodle.embed:de.flapdoodle.embed.mongo.spring3x:4.18.0")
     testImplementation("org.mockito:mockito-core")
     testImplementation("org.mockito:mockito-junit-jupiter")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
@@ -89,20 +90,27 @@ tasks.named<BootJar>("bootJar") {
     archiveFileName.set("generic-orchestrator.jar")
 }
 
-// JaCoCo: cobertura específica das classes da feature_3 (retry + circuit breaker)
-val resilienceCoverageClasses = listOf(
+// JaCoCo: cobertura ≥ 95% nas classes das features feature_3 (resiliência) e
+// do refactor para o Manager (workflow client + cache).
+val coverageIncludes = listOf(
+    // feature_3 — Retry + Circuit Breaker
     "com/orchestrator/integration/http/HttpIntegrationExecutor.class",
     "com/orchestrator/config/HttpResilienceConfig.class",
     "com/orchestrator/config/properties/RetryConfigurationProperties.class",
     "com/orchestrator/config/properties/CircuitBreakerConfigurationProperties.class",
-    "com/orchestrator/exception/RetriableHttpException.class"
+    "com/orchestrator/exception/RetriableHttpException.class",
+    // Manager client + Redis cache
+    "com/orchestrator/manager/**",
+    "com/orchestrator/config/RedisCacheConfig.class",
+    "com/orchestrator/config/ManagerWebClientConfig.class",
+    "com/orchestrator/config/properties/ManagerProperties.class"
 )
 
 tasks.named<JacocoReport>("jacocoTestReport") {
     dependsOn(tasks.named("test"))
     classDirectories.setFrom(
         files(classDirectories.files.map {
-            fileTree(it) { include(resilienceCoverageClasses) }
+            fileTree(it) { include(coverageIncludes) }
         })
     )
     reports {
@@ -115,7 +123,7 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
     dependsOn(tasks.named("test"))
     classDirectories.setFrom(
         files(classDirectories.files.map {
-            fileTree(it) { include(resilienceCoverageClasses) }
+            fileTree(it) { include(coverageIncludes) }
         })
     )
     violationRules {

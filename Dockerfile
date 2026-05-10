@@ -15,6 +15,10 @@ COPY --from=build /app/build/libs/generic-orchestrator.jar app.jar
 # ── Infraestrutura ─────────────────────────────────────────────────────────────
 ENV MONGODB_URI=mongodb://localhost:27017/generic-orchestrator \
     MONGODB_DATABASE=generic-orchestrator \
+    REDIS_HOST=localhost \
+    REDIS_PORT=6379 \
+    REDIS_PASSWORD="" \
+    REDIS_TIMEOUT_MS=2000 \
     RABBITMQ_HOST=localhost \
     RABBITMQ_PORT=5672 \
     RABBITMQ_USERNAME=guest \
@@ -25,6 +29,14 @@ ENV MONGODB_URI=mongodb://localhost:27017/generic-orchestrator \
     AWS_SQS_ENDPOINT="" \
     AWS_ACCESS_KEY_ID="" \
     AWS_SECRET_ACCESS_KEY=""
+
+# ── Service Portal Manager (consulta de workflows) ────────────────────────────
+ENV MANAGER_URL=http://localhost:8082 \
+    MANAGER_USERNAME=admin \
+    MANAGER_PASSWORD=admin \
+    MANAGER_TIMEOUT_MS=5000 \
+    WORKFLOWS_CACHE_TTL_SECONDS=3600 \
+    WORKFLOWS_WARM_UP_ENABLED=true
 
 # ── Segurança ──────────────────────────────────────────────────────────────────
 ENV JWT_SECRET=CHANGE_ME_PLEASE_THIS_IS_A_DEV_ONLY_SECRET_AT_LEAST_64_CHARS_LONG_FOR_HS512 \
