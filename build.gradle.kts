@@ -2,6 +2,7 @@ import org.springframework.boot.gradle.tasks.bundling.BootJar
 
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "3.4.5"
     id("io.spring.dependency-management") version "1.1.7"
 }
@@ -64,7 +65,7 @@ dependencies {
     testImplementation("org.springframework.kafka:spring-kafka-test")
     testImplementation("org.springframework.amqp:spring-rabbit-test")
     testImplementation("io.projectreactor:reactor-test")
-    testImplementation("de.flapdoodle.embed:de.flapdoodle.embed.mongo.spring31x:4.18.0")
+    testImplementation("de.flapdoodle.embed:de.flapdoodle.embed.mongo.spring3x:4.18.0")
     testImplementation("org.mockito:mockito-core")
     testImplementation("org.mockito:mockito-junit-jupiter")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
@@ -86,4 +87,43 @@ tasks.withType<Test> {
 
 tasks.named<BootJar>("bootJar") {
     archiveFileName.set("generic-orchestrator.jar")
+}
+
+// JaCoCo: cobertura específica das classes da feature_3 (retry + circuit breaker)
+val resilienceCoverageClasses = listOf(
+    "com/orchestrator/integration/http/HttpIntegrationExecutor.class",
+    "com/orchestrator/config/HttpResilienceConfig.class",
+    "com/orchestrator/config/properties/RetryConfigurationProperties.class",
+    "com/orchestrator/config/properties/CircuitBreakerConfigurationProperties.class",
+    "com/orchestrator/exception/RetriableHttpException.class"
+)
+
+tasks.named<JacocoReport>("jacocoTestReport") {
+    dependsOn(tasks.named("test"))
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) { include(resilienceCoverageClasses) }
+        })
+    )
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+}
+
+tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
+    dependsOn(tasks.named("test"))
+    classDirectories.setFrom(
+        files(classDirectories.files.map {
+            fileTree(it) { include(resilienceCoverageClasses) }
+        })
+    )
+    violationRules {
+        rule {
+            limit {
+                counter = "INSTRUCTION"
+                minimum = "0.95".toBigDecimal()
+            }
+        }
+    }
 }

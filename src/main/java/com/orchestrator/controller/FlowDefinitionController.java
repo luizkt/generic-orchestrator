@@ -8,12 +8,19 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/flows")
 @RequiredArgsConstructor
 public class FlowDefinitionController {
 
     private final FlowDefinitionService service;
+
+    @GetMapping
+    public ResponseEntity<List<FlowDefinition>> listActive() {
+        return ResponseEntity.ok(service.findAllActive());
+    }
 
     @PostMapping(consumes = {"application/x-yaml", "text/yaml", MediaType.TEXT_PLAIN_VALUE, MediaType.APPLICATION_JSON_VALUE})
     public ResponseEntity<FlowDefinition> create(@RequestBody String yaml) {

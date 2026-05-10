@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -43,6 +44,10 @@ public class FlowDefinitionService {
         updated.setCriadoEm(existing.getCriadoEm());
         updated.setAtualizadoEm(LocalDateTime.now());
         return repository.save(updated);
+    }
+
+    public List<FlowDefinition> findAllActive() {
+        return repository.findByAtivoTrue();
     }
 
     public void deactivate(String flowId) {

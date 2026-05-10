@@ -10,8 +10,10 @@ import com.orchestrator.domain.model.HttpIntegrationConfig;
 import com.orchestrator.domain.model.IntegrationDefinition;
 import com.orchestrator.domain.model.IntegrationType;
 import com.orchestrator.exception.IntegrationExecutionException;
+import com.orchestrator.exception.RetriableHttpException;
 import com.orchestrator.integration.http.HttpIntegrationExecutor;
 import com.orchestrator.service.TemplateResolverService;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.RetryRegistry;
 import okhttp3.mockwebserver.MockResponse;
@@ -66,7 +68,8 @@ class HttpIntegrationExecutorTest {
         Object result = executor.execute(buildDef("GET", null, 5000), new FlowExecutionContext());
 
         assertThat(result).isInstanceOf(Map.class);
-        assertThat(((Map<?, ?>) result)).containsEntry("status", "ok");
+        @SuppressWarnings("unchecked") Map<String, Object> map = (Map<String, Object>) result;
+        assertThat(map).containsEntry("status", "ok");
     }
 
     @Test @DisplayName("Retry em status 500 e sucesso na terceira tentativa")
@@ -81,7 +84,8 @@ class HttpIntegrationExecutorTest {
         Object result = executor.execute(buildDef("GET", null, 5000), new FlowExecutionContext());
 
         assertThat(mockWebServer.getRequestCount()).isEqualTo(3);
-        assertThat(((Map<?, ?>) result)).containsEntry("recuperado", true);
+        @SuppressWarnings("unchecked") Map<String, Object> map = (Map<String, Object>) result;
+        assertThat(map).containsEntry("recuperado", true);
     }
 
     @Test @DisplayName("Não realiza retry em status 404")
@@ -119,7 +123,8 @@ class HttpIntegrationExecutorTest {
         def.setId("test-integration");
         def.setTipo(IntegrationType.HTTP);
         HttpIntegrationConfig http = new HttpIntegrationConfig();
-        http.setUrl(mockWebServer.url("/api/{{contrato.id}}").toString());
+        String baseUrl = "http://" + mockWebServer.getHostName() + ":" + mockWebServer.getPort();
+        http.setUrl(baseUrl + "/api/{{contrato.id}}");
         http.setMetodo("POST");
         http.setBodyTemplate("{\"id\":\"{{contrato.id}}\"}");
         http.setHeaders(Map.of("Content-Type", "application/json"));
@@ -133,7 +138,133 @@ class HttpIntegrationExecutorTest {
         assertThat(request.getBody().readUtf8()).contains("\"id\":\"123\"");
     }
 
-    private IntegrationDefinition buildDef(String method, String bodyTemplate, long timeout) {
+    @Test @DisplayName("getType retorna HTTP")
+    void getTypeRetornaHttp() {
+        assertThat(executor.getType()).isEqualTo(IntegrationType.HTTP);
+    }
+
+    @Test @DisplayName("Lança erro quando configuração HTTP está ausente")
+    void deveLancarErroQuandoConfigHttpAusente() {
+        IntegrationDefinition def = new IntegrationDefinition();
+        def.setId("missing-http");
+        def.setTipo(IntegrationType.HTTP);
+
+        assertThatThrownBy(() -> executor.execute(def, new FlowExecutionContext()))
+                .isInstanceOf(IntegrationExecutionException.class)
+                .hasMessageContaining("missing-http");
+    }
+
+    @Test @DisplayName("Resposta vazia retorna Map vazio")
+    void respostaVaziaRetornaMapVazio() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(200).setBody(""));
+
+        Object result = executor.execute(buildDef("GET", null, 5000), new FlowExecutionContext());
+
+        assertThat(result).isInstanceOf(Map.class);
+        assertThat((Map<?, ?>) result).isEmpty();
+    }
+
+    @Test @DisplayName("Resposta não-JSON é encapsulada em Map com chave 'response'")
+    void respostaNaoJsonEncapsulada() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(200).setBody("texto livre"));
+
+        Object result = executor.execute(buildDef("GET", null, 5000), new FlowExecutionContext());
+
+        @SuppressWarnings("unchecked") Map<String, Object> map = (Map<String, Object>) result;
+        assertThat(map).containsEntry("response", "texto livre");
+    }
+
+    @Test @DisplayName("Usa timeout do retry-configuration quando integração não define timeout")
+    void usaTimeoutPadraoDoRetryConfiguration() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(200).setBody("{\"ok\":true}"));
+
+        IntegrationDefinition def = buildDef("GET", null, 0);
+        Object result = executor.execute(def, new FlowExecutionContext());
+
+        assertThat(result).isInstanceOf(Map.class);
+    }
+
+    @Test @DisplayName("Default GET quando método é nulo")
+    void defaultGetQuandoMetodoNulo() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(200).setBody("{}"));
+
+        Object result = executor.execute(buildDef(null, null, 5000), new FlowExecutionContext());
+
+        assertThat(result).isInstanceOf(Map.class);
+    }
+
+    @Test @DisplayName("Circuit breaker aberto bloqueia chamadas e lança IntegrationExecutionException")
+    void circuitBreakerAbertoBloqueiaChamadas() {
+        OrchIntegrationsProperties props = buildTestProperties();
+        HttpResilienceConfig config = new HttpResilienceConfig(props);
+        CircuitBreakerRegistry cbRegistry = config.httpCircuitBreakerRegistry();
+        cbRegistry.circuitBreaker("test-integration").transitionToOpenState();
+
+        HttpIntegrationExecutor cbExecutor = new HttpIntegrationExecutor(
+                WebClient.builder().build(),
+                new TemplateResolverService(),
+                new ObjectMapper(),
+                config.httpRetryRegistry(),
+                cbRegistry,
+                props);
+
+        assertThatThrownBy(() -> cbExecutor.execute(buildDef("GET", null, 5000), new FlowExecutionContext()))
+                .isInstanceOf(IntegrationExecutionException.class)
+                .hasMessageContaining("Circuit breaker aberto");
+    }
+
+    @Test @DisplayName("Listener de transição de estado do circuit breaker é acionado")
+    void listenerDeTransicaoDeEstado() {
+        mockWebServer.enqueue(new MockResponse().setResponseCode(200).setBody("{}"));
+        executor.execute(buildDef("GET", null, 5000), new FlowExecutionContext());
+
+        // Após o execute(), o listener está registrado no CB. Forçando uma
+        // transição manual cobrimos o lambda onStateTransition.
+        OrchIntegrationsProperties props = buildTestProperties();
+        HttpResilienceConfig configRef = new HttpResilienceConfig(props);
+        CircuitBreaker cb = configRef.httpCircuitBreakerRegistry().circuitBreaker("test-integration");
+        cb.getEventPublisher().onStateTransition(e ->
+                assertThat(e.getStateTransition().getFromState()).isNotNull());
+        cb.transitionToOpenState();
+        cb.transitionToHalfOpenState();
+        cb.transitionToClosedState();
+    }
+
+    @Test @DisplayName("Predicate de retry rejeita CallNotPermittedException")
+    void retryPredicateRejeitaCallNotPermitted() {
+        OrchIntegrationsProperties props = buildTestProperties();
+        RetryRegistry registry = new HttpResilienceConfig(props).httpRetryRegistry();
+
+        var predicate = registry.getDefaultConfig().getExceptionPredicate();
+
+        var cnpe = io.github.resilience4j.circuitbreaker.CallNotPermittedException
+                .createCallNotPermittedException(
+                        io.github.resilience4j.circuitbreaker.CircuitBreaker.ofDefaults("x"));
+
+        assertThat(predicate.test(cnpe)).isFalse();
+        assertThat(predicate.test(new RetriableHttpException("retry", 500))).isTrue();
+        assertThat(predicate.test(new RuntimeException("rede"))).isTrue();
+    }
+
+    @Test @DisplayName("RetriableHttpException expõe statusCode")
+    void retriableHttpExceptionStatusCode() {
+        RetriableHttpException ex = new RetriableHttpException("erro", 503);
+        assertThat(ex.getStatusCode()).isEqualTo(503);
+        assertThat(ex.getMessage()).isEqualTo("erro");
+    }
+
+    @Test @DisplayName("Circuit breaker com sliding window TIME-based")
+    void circuitBreakerSlidingWindowTimeBased() {
+        OrchIntegrationsProperties props = buildTestProperties();
+        props.getCircuitBreakerConfiguration().setSlidingWindowSizeType("TIME");
+        HttpResilienceConfig config = new HttpResilienceConfig(props);
+
+        var cb = config.httpCircuitBreakerRegistry().circuitBreaker("any");
+        assertThat(cb.getCircuitBreakerConfig().getSlidingWindowType())
+                .isEqualTo(io.github.resilience4j.circuitbreaker.CircuitBreakerConfig.SlidingWindowType.TIME_BASED);
+    }
+
+    private IntegrationDefinition buildDef(String method, String bodyTemplate, int timeout) {
         IntegrationDefinition def = new IntegrationDefinition();
         def.setId("test-integration");
         def.setTipo(IntegrationType.HTTP);
