@@ -173,10 +173,10 @@ O profile `docker` configura:
 
 ---
 
-## Infraestrutura local (`docker-compose.yml`)
+## Infraestrutura local (`docker-compose-service-portal.yml`)
 
 ```bash
-docker compose up -d
+docker compose -f docker-compose-service-portal.yml up -d
 ```
 
 Sobe os serviços:
@@ -185,9 +185,24 @@ Sobe os serviços:
 |---|---|---|
 | MongoDB 7 | 27017 | Armazenamento dos workflows |
 | RabbitMQ 3 | 5672 / 15672 | Broker + Management UI |
-| Kafka (Confluent 7.6) | 9092 | Broker |
-| Zookeeper | 2181 | Dependência do Kafka |
-| LocalStack 3 | 4566 | Emulador AWS SQS |
+| Kafka (Bitnami 3.7, KRaft) | 9092 | Broker |
+| LocalStack 3 (opcional) | 4566 | Emulador AWS SQS |
+| **WireMock** | **18080** (admin/host) | Simulador de APIs HTTP externas — alias `api.exemplo.com` na rede `portal` |
+
+### WireMock — APIs externas simuladas
+
+Os fluxos com integrações HTTP que apontam para `http://api.exemplo.com/...` (ex.: [docs/example-flow.yml](docs/example-flow.yml)) caem no container WireMock automaticamente: o `docker-compose-service-portal.yml` registra `api.exemplo.com` como **alias de rede** do container, então o DNS interno do Docker resolve a chamada — sem alterar URLs nos workflows.
+
+Mappings em [`wiremock/mappings/`](../wiremock/mappings/) (raiz do repo). Para inspecionar via host:
+
+```bash
+curl http://localhost:18080/clientes/ABC123      # 200 com cliente fictício
+curl http://localhost:18080/clientes/foo         # 404 (fallback)
+curl http://localhost:18080/__admin/mappings     # lista de stubs
+curl http://localhost:18080/__admin/requests     # últimas chamadas recebidas
+```
+
+Detalhes e como adicionar novos stubs: [`wiremock/README.md`](../wiremock/README.md).
 
 ### Inicialização do MongoDB
 
@@ -195,7 +210,7 @@ O diretório `mongodb-workflows/` é montado em `/docker-entrypoint-initdb.d` do
 
 1. Cria o database `generic-orchestrator`
 2. Cria a collection `workflows`
-3. Cria índice único em `flowId`
+3. Cria índice composto único em `id` + `versao`
 
 ---
 

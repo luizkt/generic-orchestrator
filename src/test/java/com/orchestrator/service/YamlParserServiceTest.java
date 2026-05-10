@@ -2,11 +2,16 @@ package com.orchestrator.service;
 
 import com.orchestrator.domain.model.FieldType;
 import com.orchestrator.domain.model.FlowDefinition;
+import com.orchestrator.domain.model.IntegrationDefinition;
 import com.orchestrator.domain.model.IntegrationType;
+import com.orchestrator.domain.model.QueueProvider;
 import com.orchestrator.exception.InvalidFlowDefinitionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -108,5 +113,42 @@ class YamlParserServiceTest {
         FlowDefinition d = service.parse(yaml);
         assertThat(d.getIntegracoes().get(0).getProvider().name()).isEqualTo("KAFKA");
         assertThat(d.getIntegracoes().get(0).getQueue().getTopic()).isEqualTo("events");
+    }
+
+    @Test
+    @DisplayName("docs/example-flow.yml: parse e estrutura conferem com o WireMock simulado")
+    void exemploFlowYamlEstaConsistenteComWiremock() throws Exception {
+        // Arquivo entregue como documentação e usado no docker-compose com WireMock.
+        // Garante que: (1) o YAML é parseável; (2) a URL HTTP aponta para api.exemplo.com
+        //   (alias do container WireMock); (3) provider está no nível da integração
+        //   (não dentro de queue); (4) integrações QUEUE têm provider definido.
+        String yaml = Files.readString(Path.of("docs/example-flow.yml"));
+        FlowDefinition d = service.parse(yaml);
+
+        assertThat(d.getFlowId()).isEqualTo("criar-pedido-v1");
+        assertThat(d.getVersao()).isEqualTo("1.0.0");
+        assertThat(d.isAtivo()).isTrue();
+        assertThat(d.getContrato().getCampos()).hasSize(2);
+        assertThat(d.getIntegracoes()).hasSize(5);
+
+        IntegrationDefinition http = d.getIntegracoes().get(0);
+        assertThat(http.getTipo()).isEqualTo(IntegrationType.HTTP);
+        assertThat(http.getHttp().getUrl())
+                .as("URL deve apontar para o alias WireMock (HTTP, sem TLS)")
+                .startsWith("http://api.exemplo.com/clientes/")
+                .doesNotStartWith("https://");
+        assertThat(http.getHttp().getMetodo()).isEqualTo("GET");
+
+        IntegrationDefinition db = d.getIntegracoes().get(1);
+        assertThat(db.getTipo()).isEqualTo(IntegrationType.DATABASE);
+
+        IntegrationDefinition rabbit = d.getIntegracoes().get(2);
+        assertThat(rabbit.getProvider())
+                .as("provider deve ficar no nível da integração, não dentro de queue")
+                .isEqualTo(QueueProvider.RABBITMQ);
+        assertThat(rabbit.getQueue().getExchange()).isEqualTo("pedidos.exchange");
+
+        assertThat(d.getIntegracoes().get(3).getProvider()).isEqualTo(QueueProvider.KAFKA);
+        assertThat(d.getIntegracoes().get(4).getProvider()).isEqualTo(QueueProvider.SQS);
     }
 }

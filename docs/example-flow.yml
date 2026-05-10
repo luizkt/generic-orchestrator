@@ -26,7 +26,9 @@ fluxo:
       tipo: HTTP
       continuarEmErro: false
       http:
-        url: "https://api.exemplo.com/clientes/{{contrato.clienteId}}"
+        # Em dev/local, "api.exemplo.com" resolve para o container WireMock
+        # via alias da rede `portal` em docker-compose-service-portal.yml.
+        url: "http://api.exemplo.com/clientes/{{contrato.clienteId}}"
         metodo: GET
         headers:
           Content-Type: "application/json"
@@ -48,9 +50,9 @@ fluxo:
     - id: "notificar-rabbit"
       ordem: 3
       tipo: QUEUE
+      provider: RABBITMQ
       continuarEmErro: true
       queue:
-        provider: RABBITMQ
         exchange: "pedidos.exchange"
         routingKey: "pedido.criado"
         mensagemTemplate: |
@@ -60,9 +62,9 @@ fluxo:
     - id: "notificar-kafka"
       ordem: 4
       tipo: QUEUE
+      provider: KAFKA
       continuarEmErro: true
       queue:
-        provider: KAFKA
         topic: "pedidos.criados"
         mensagemTemplate: |
           {"pedidoId":"{{integracoes.salvar-pedido.pedidoId}}"}
@@ -70,9 +72,9 @@ fluxo:
     - id: "notificar-sqs"
       ordem: 5
       tipo: QUEUE
+      provider: SQS
       continuarEmErro: true
       queue:
-        provider: SQS
         queueUrl: "https://sqs.us-east-1.amazonaws.com/123/pedidos"
         mensagemTemplate: |
           {"pedidoId":"{{integracoes.salvar-pedido.pedidoId}}"}
