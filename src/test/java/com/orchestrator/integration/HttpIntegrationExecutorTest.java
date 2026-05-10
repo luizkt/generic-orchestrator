@@ -35,6 +35,7 @@ class HttpIntegrationExecutorTest {
 
     private MockWebServer mockWebServer;
     private HttpIntegrationExecutor executor;
+    private CircuitBreakerRegistry circuitBreakerRegistry;
 
     @BeforeEach
     void setUp() throws IOException {
@@ -43,13 +44,14 @@ class HttpIntegrationExecutorTest {
 
         OrchIntegrationsProperties props = buildTestProperties();
         HttpResilienceConfig resilienceConfig = new HttpResilienceConfig(props);
+        circuitBreakerRegistry = resilienceConfig.httpCircuitBreakerRegistry();
 
         executor = new HttpIntegrationExecutor(
                 WebClient.builder().build(),
                 new TemplateResolverService(),
                 new ObjectMapper(),
                 resilienceConfig.httpRetryRegistry(),
-                resilienceConfig.httpCircuitBreakerRegistry(),
+                circuitBreakerRegistry,
                 props);
     }
 
@@ -218,14 +220,11 @@ class HttpIntegrationExecutorTest {
         mockWebServer.enqueue(new MockResponse().setResponseCode(200).setBody("{}"));
         executor.execute(buildDef("GET", null, 5000), new FlowExecutionContext());
 
-        // Após o execute(), o listener está registrado no CB. Forçando uma
-        // transição manual cobrimos o lambda onStateTransition.
-        OrchIntegrationsProperties props = buildTestProperties();
-        HttpResilienceConfig configRef = new HttpResilienceConfig(props);
-        CircuitBreaker cb = configRef.httpCircuitBreakerRegistry().circuitBreaker("test-integration");
-        cb.getEventPublisher().onStateTransition(e ->
-                assertThat(e.getStateTransition().getFromState()).isNotNull());
+        // Após o execute(), o listener está registrado no CB. Forçando transições
+        // manuais cobrimos os lambdas onStateTransition e onCallNotPermitted.
+        CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker("test-integration");
         cb.transitionToOpenState();
+        try { cb.acquirePermission(); } catch (Exception ignored) { }
         cb.transitionToHalfOpenState();
         cb.transitionToClosedState();
     }
