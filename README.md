@@ -24,6 +24,7 @@ Define e executa fluxos de orquestração declarados em YAML, armazenados no Mon
 | AWS SQS | LocalStack 3 (dev) / AWS SDK v2 (prod) |
 | Segurança | Spring Security + JWT HS512 (jjwt 0.12.6) |
 | HTTP client | Spring WebFlux WebClient (Netty) |
+| Resiliência | Resilience4j 2.2 (retry + circuit breaker) |
 
 ---
 
@@ -33,14 +34,19 @@ Define e executa fluxos de orquestração declarados em YAML, armazenados no Mon
 src/main/java/com/orchestrator/
 ├── config/
 │   ├── properties/
-│   │   ├── OrchIntegrationsProperties.java   # @ConfigurationProperties("orch-integrations")
-│   │   ├── KafkaIntegrationProperties.java   # Config de uma instância Kafka
-│   │   └── RabbitMqIntegrationProperties.java# Config de uma instância RabbitMQ
-│   ├── KafkaMultiInstanceConfig.java         # Cria Map<id, KafkaTemplate>
-│   ├── RabbitMqMultiInstanceConfig.java      # Cria Map<id, RabbitTemplate>
+│   │   ├── OrchIntegrationsProperties.java        # @ConfigurationProperties("orch-integrations")
+│   │   ├── KafkaIntegrationProperties.java        # Config de uma instância Kafka
+│   │   ├── RabbitMqIntegrationProperties.java     # Config de uma instância RabbitMQ
+│   │   ├── RetryConfigurationProperties.java      # Backoff, tentativas e status retryáveis
+│   │   └── CircuitBreakerConfigurationProperties.java
+│   ├── KafkaMultiInstanceConfig.java              # Cria Map<id, KafkaTemplate>
+│   ├── RabbitMqMultiInstanceConfig.java           # Cria Map<id, RabbitTemplate>
+│   ├── HttpResilienceConfig.java                  # RetryRegistry + CircuitBreakerRegistry
 │   ├── SqsConfig.java
 │   ├── WebClientConfig.java
 │   └── JacksonConfig.java
+├── exception/
+│   └── RetriableHttpException.java                # Sinaliza status retryáveis (500, 429, 408)
 ├── domain/
 │   ├── model/                                # FlowDefinition, IntegrationDefinition, etc.
 │   └── execution/                            # FlowExecutionContext, FlowExecutionResult
@@ -98,6 +104,26 @@ orch-integrations:                   # Configuração multi-instância dos broke
       producer:
         key-serializer: org.apache.kafka.common.serialization.StringSerializer
         value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+  # Resiliência das integrações HTTP — Retry com backoff exponencial
+  retry-configuration:
+    maximum-attempts: 3                # Total de tentativas (inclui a primeira)
+    delay: 100                         # Delay inicial em ms
+    backoff-multiplier: 2.0            # Multiplicador entre tentativas
+    maximum-delay: 10000               # Teto do delay (ms)
+    retryable-http-condition: [500, 429, 408]  # Status que disparam retry
+    timeout: 1000                      # Timeout default por tentativa quando o YAML não define
+
+  # Circuit breaker — protege o downstream de chamadas em falha
+  circuit-breaker-configuration:
+    sliding-window-size: 10            # Janela de N chamadas (ou segundos, se TIME)
+    sliding-window-size-type: COUNT    # COUNT | TIME
+    minimum-number-calls: 100          # Mínimo antes de calcular taxa de falha
+    failure-rate-threshold: 50         # % de falhas para abrir o circuito
+    wait-duration-open-state: 30       # Segundos no estado OPEN antes de HALF_OPEN
+    permitted-calls-open-state: 10     # Chamadas-teste no estado HALF_OPEN
+    automatic-transition-half-open-enabled: true
+    slow-call-duration-threshold: 800  # ms — chamadas mais lentas contam como falha
 ```
 
 ### Multi-instância de brokers (`orch-integrations`)
@@ -106,6 +132,21 @@ O orquestrador suporta múltiplas instâncias de Kafka e RabbitMQ configuradas s
 
 - O `id` da integração no YAML do workflow deve corresponder ao `id` configurado em `orch-integrations.kafkas` ou `orch-integrations.rabbitmqs`.
 - Se nenhuma configuração for encontrada para o `id`, a execução falha com mensagem clara indicando qual `id` está ausente.
+
+### Resiliência HTTP — Retry + Circuit Breaker (Resilience4j)
+
+Toda integração HTTP passa por uma cadeia `Retry( CircuitBreaker( httpCall ) )` em [HttpIntegrationExecutor](src/main/java/com/orchestrator/integration/http/HttpIntegrationExecutor.java):
+
+- **Retry** com backoff exponencial — `delay × backoffMultiplier^(n-1)` limitado por `maximumDelay`. Status retryáveis (`retryable-http-condition`) são propagados como `RetriableHttpException` e disparam retry; demais respostas HTTP (`WebClientResponseException`) propagam sem retry. Erros de rede/timeout que não são `WebClientResponseException` também são retentados.
+- **Circuit Breaker** — uma instância por `integration.id`. O estado transita entre `CLOSED → OPEN → HALF_OPEN → CLOSED` conforme `failure-rate-threshold` e `slow-call-duration-threshold`. Quando aberto, o `CallNotPermittedException` é capturado e devolvido como `IntegrationExecutionException("Circuit breaker aberto para: …")` — sem retry.
+- Configuração padrão **única** para todas as integrações HTTP, externalizada em `orch-integrations.retry-configuration` e `orch-integrations.circuit-breaker-configuration`.
+
+Cobertura de testes da feature: **100%** (435 instruções) — gate `jacocoTestCoverageVerification` exige ≥ 95%. Rode com:
+
+```bash
+./gradlew test jacocoTestReport jacocoTestCoverageVerification
+# Relatório HTML: build/reports/jacoco/test/html/index.html
+```
 
 ---
 
@@ -196,11 +237,12 @@ curl -X POST http://localhost:8080/api/auth/login \
 | Método | Endpoint | Descrição |
 |---|---|---|
 | POST | `/api/auth/login` | Gera token JWT |
+| GET | `/api/flows` | Lista fluxos ativos |
 | POST | `/api/flows` | Cadastra fluxo (corpo: YAML) |
 | GET | `/api/flows/{flowId}` | Busca fluxo ativo |
 | PUT | `/api/flows/{flowId}` | Atualiza fluxo |
 | DELETE | `/api/flows/{flowId}` | Desativa fluxo |
-| POST | `/api/orchestrate/{flowId}` | Executa fluxo com payload JSON |
+| POST | `/api/orchestrate/{version}/{flowId}` | Executa fluxo com payload JSON (`version` no path — match em `id` + `versao` no Mongo) |
 | GET | `/actuator/health` | Health check |
 
 ---
@@ -414,10 +456,10 @@ fluxo:
           {"documento":"{{contrato.aluno.documento}}"}
 ```
 
-**Payload de execução:**
+**Payload de execução (note `version` no path):**
 
 ```bash
-curl -X POST http://localhost:8080/api/orchestrate/consulta-cursos-aluno \
+curl -X POST http://localhost:8080/api/orchestrate/v1/consulta-cursos-aluno \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
@@ -460,6 +502,6 @@ curl -X POST http://localhost:8080/api/orchestrate/consulta-cursos-aluno \
 
 - **Database:** `generic-orchestrator`
 - **Collection:** `workflows`
-- **Índice:** `flowId` único (criado pelo `init-mongo.js`)
+- **Índice:** composto único em `id` + `versao` (criado pelo `init-mongo.js`)
 
-A collection é gerenciada via `FlowDefinitionRepository` (Spring Data MongoDB). Os documentos armazenam a definição completa do fluxo, incluindo contrato e integrações.
+A collection é gerenciada via `FlowDefinitionRepository` (Spring Data MongoDB). Os documentos armazenam a definição completa do fluxo, incluindo contrato e integrações. O índice composto permite múltiplas versões de um mesmo `id` coexistirem; o segmento `version` na URL `/api/orchestrate/{version}/{flowId}` direciona qual delas será executada.
