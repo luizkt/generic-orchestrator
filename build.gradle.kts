@@ -29,7 +29,6 @@ extra["resilience4jVersion"] = "2.2.0"
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("org.springframework.boot:spring-boot-starter-validation")
@@ -72,7 +71,6 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("org.testcontainers:testcontainers:${property("testcontainersVersion")}")
     testImplementation("org.testcontainers:junit-jupiter:${property("testcontainersVersion")}")
-    testImplementation("org.testcontainers:mongodb:${property("testcontainersVersion")}")
     testImplementation("org.testcontainers:rabbitmq:${property("testcontainersVersion")}")
     testImplementation("org.testcontainers:kafka:${property("testcontainersVersion")}")
     testImplementation("org.testcontainers:localstack:${property("testcontainersVersion")}")

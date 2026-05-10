@@ -13,9 +13,9 @@ WORKDIR /app
 COPY --from=build /app/build/libs/generic-orchestrator.jar app.jar
 
 # ── Infraestrutura ─────────────────────────────────────────────────────────────
-ENV MONGODB_URI=mongodb://localhost:27017/generic-orchestrator \
-    MONGODB_DATABASE=generic-orchestrator \
-    REDIS_HOST=localhost \
+# MongoDB foi removido — workflows não fazem mais operações em bancos arbitrários
+# durante a execução. Persistência acontece via integrações HTTP/QUEUE downstream.
+ENV REDIS_HOST=localhost \
     REDIS_PORT=6379 \
     REDIS_PASSWORD="" \
     REDIS_TIMEOUT_MS=2000 \

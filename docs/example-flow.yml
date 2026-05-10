@@ -36,16 +36,21 @@ fluxo:
 
     - id: "salvar-pedido"
       ordem: 2
-      tipo: DATABASE
+      tipo: HTTP
       continuarEmErro: false
-      database:
-        operacao: INSERT
-        colecao: "pedidos"
-        documentoTemplate: |
+      http:
+        # Persistência de domínio é responsabilidade de um serviço downstream
+        # (não mais do orquestrador). O exemplo simula via WireMock.
+        url: "http://api.exemplo.com/pedidos"
+        metodo: POST
+        headers:
+          Content-Type: "application/json"
+        bodyTemplate: |
           {"clienteId":"{{contrato.clienteId}}","valor":"{{contrato.valor}}","status":"CRIADO"}
+        timeout: 5000
         mapeamentoResposta:
           campoDestino: "pedidoId"
-          campoOrigem: "_id"
+          campoOrigem: "id"
 
     - id: "notificar-rabbit"
       ordem: 3

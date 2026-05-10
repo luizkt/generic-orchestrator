@@ -6,7 +6,6 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -17,7 +16,6 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 public abstract class AbstractIntegrationTest {
 
-    static final MongoDBContainer MONGO = new MongoDBContainer(DockerImageName.parse("mongo:7"));
     static final RabbitMQContainer RABBIT = new RabbitMQContainer(DockerImageName.parse("rabbitmq:3-management"));
     static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"));
     static final LocalStackContainer LOCALSTACK = new LocalStackContainer(
@@ -28,7 +26,6 @@ public abstract class AbstractIntegrationTest {
             .withExposedPorts(6379);
 
     static {
-        MONGO.start();
         RABBIT.start();
         KAFKA.start();
         LOCALSTACK.start();
@@ -37,7 +34,6 @@ public abstract class AbstractIntegrationTest {
 
     @DynamicPropertySource
     static void registerProperties(DynamicPropertyRegistry r) {
-        r.add("spring.data.mongodb.uri", MONGO::getReplicaSetUrl);
         r.add("spring.data.redis.host", REDIS::getHost);
         r.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         r.add("spring.rabbitmq.host", RABBIT::getHost);

@@ -2,9 +2,6 @@ spring:
   application:
     name: generic-orchestrator
   data:
-    mongodb:
-      uri: ${MONGODB_URI:mongodb://localhost:27017/generic-orchestrator}
-      database: ${MONGODB_DATABASE:generic-orchestrator}
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}

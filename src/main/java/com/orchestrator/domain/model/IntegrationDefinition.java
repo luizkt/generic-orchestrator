@@ -10,5 +10,4 @@ public class IntegrationDefinition {
     private boolean continuarEmErro;
     private HttpIntegrationConfig http;
     private QueueIntegrationConfig queue;
-    private DatabaseIntegrationConfig database;
 }

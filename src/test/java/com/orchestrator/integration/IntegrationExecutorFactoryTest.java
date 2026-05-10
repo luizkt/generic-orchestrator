@@ -25,11 +25,9 @@ class IntegrationExecutorFactoryTest {
     void deveRetornarExecutorPorTipo() {
         var http = new FakeExecutor(IntegrationType.HTTP);
         var queue = new FakeExecutor(IntegrationType.QUEUE);
-        var db = new FakeExecutor(IntegrationType.DATABASE);
-        IntegrationExecutorFactory factory = new IntegrationExecutorFactory(List.of(http, queue, db));
+        IntegrationExecutorFactory factory = new IntegrationExecutorFactory(List.of(http, queue));
         assertThat(factory.get(IntegrationType.HTTP)).isSameAs(http);
         assertThat(factory.get(IntegrationType.QUEUE)).isSameAs(queue);
-        assertThat(factory.get(IntegrationType.DATABASE)).isSameAs(db);
     }
 
     @Test @DisplayName("Lança exceção se executor não registrado")

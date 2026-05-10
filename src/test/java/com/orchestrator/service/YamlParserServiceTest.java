@@ -139,8 +139,10 @@ class YamlParserServiceTest {
                 .doesNotStartWith("https://");
         assertThat(http.getHttp().getMetodo()).isEqualTo("GET");
 
-        IntegrationDefinition db = d.getIntegracoes().get(1);
-        assertThat(db.getTipo()).isEqualTo(IntegrationType.DATABASE);
+        IntegrationDefinition salvar = d.getIntegracoes().get(1);
+        assertThat(salvar.getTipo()).isEqualTo(IntegrationType.HTTP);
+        assertThat(salvar.getHttp().getMetodo()).isEqualTo("POST");
+        assertThat(salvar.getHttp().getUrl()).isEqualTo("http://api.exemplo.com/pedidos");
 
         IntegrationDefinition rabbit = d.getIntegracoes().get(2);
         assertThat(rabbit.getProvider())

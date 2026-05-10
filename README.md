@@ -4,10 +4,14 @@ Orquestrador genérico baseado em Java 21 LTS + Spring Boot 3.4 LTS + Gradle.
 
 ## Visão Geral
 
-Define e executa fluxos de orquestração declarados em YAML, armazenados no MongoDB. Cada fluxo descreve:
+Define e executa fluxos de orquestração declarados em YAML. Cada fluxo descreve:
 
 - **Contrato de entrada**: validação de campos com tipos e regras (similar a Bean Validation)
-- **Integrações**: passos executados em ordem — chamadas HTTP, publicação em filas (RabbitMQ, Kafka, SQS) e operações no MongoDB
+- **Integrações**: passos executados em ordem — chamadas HTTP e publicação em filas (RabbitMQ, Kafka, SQS)
+
+Os workflows em si **não são armazenados pelo orquestrador** — vivem no [`service-portal-manager`](../service-portal-manager/), que serve o YAML cru via API. O orquestrador consome via Redis (cache 1h) com fallback no Manager.
+
+> ⚠️ **Mudança de escopo (refactor):** o orquestrador **não tem mais integração de banco de dados**. Workflows não fazem mais operações genéricas em MongoDB durante a execução — persistência de domínio é responsabilidade dos serviços downstream chamados via integrações HTTP/QUEUE.
 
 ---
 
@@ -18,9 +22,8 @@ Define e executa fluxos de orquestração declarados em YAML, armazenados no Mon
 | Java | 21 LTS |
 | Spring Boot | 3.4.5 LTS |
 | Gradle | Kotlin DSL |
-| MongoDB | 7 |
 | RabbitMQ | 3 (management) |
-| Kafka | Confluent 7.6 (cp-kafka) |
+| Kafka | Bitnami 3.7 (KRaft) |
 | AWS SQS | LocalStack 3 (dev) / AWS SDK v2 (prod) |
 | Segurança | Spring Security + JWT HS512 (jjwt 0.12.6) |
 | HTTP client | Spring WebFlux WebClient (Netty) |
@@ -62,18 +65,15 @@ src/main/java/com/orchestrator/
 │   └── execution/                            # FlowExecutionContext, FlowExecutionResult
 ├── integration/
 │   ├── http/HttpIntegrationExecutor.java
-│   ├── queue/
-│   │   ├── QueueIntegrationExecutor.java
-│   │   ├── KafkaPublisher.java
-│   │   ├── RabbitMqPublisher.java
-│   │   └── SqsPublisher.java
-│   └── database/DatabaseIntegrationExecutor.java
+│   └── queue/
+│       ├── QueueIntegrationExecutor.java
+│       ├── KafkaPublisher.java
+│       ├── RabbitMqPublisher.java
+│       └── SqsPublisher.java
 ├── service/                                  # Orquestração, validação, template resolver
-├── controller/                               # FlowDefinitionController, OrchestrationController
+├── controller/                               # OrchestrationController (CRUD migrou para o Manager)
 ├── security/                                 # JWT filter, AuthController
 └── GenericOrchestratorApplication.java
-mongodb-workflows/
-└── init-mongo.js                             # Script de init da collection no MongoDB
 docs/
 └── example-flow.yml
 ```
@@ -86,17 +86,11 @@ docs/
 
 ```yaml
 spring:
-  data:
-    mongodb:
-      uri: ${MONGODB_URI:mongodb://localhost:27017/generic-orchestrator}
-      database: ${MONGODB_DATABASE:generic-orchestrator}
   rabbitmq:                          # Usado pelo Spring AMQP (autoconfigure)
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
   kafka:                             # Usado pelo Spring Kafka (autoconfigure)
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-
-spring:
   data:
     redis:                             # Cache de workflows
       host: ${REDIS_HOST:localhost}
@@ -230,10 +224,11 @@ java -jar generic-orchestrator.jar --spring.profiles.active=docker
 ```
 
 O profile `docker` configura:
-- MongoDB em `localhost:27017/generic-orchestrator`
-- RabbitMQ em `localhost:5672`
-- Kafka em `localhost:9092`
-- LocalStack SQS em `http://localhost:4566` (credenciais `test/test`)
+- Redis em `redis:6379`
+- RabbitMQ em `rabbitmq:5672`
+- Kafka em `kafka:9092`
+- LocalStack SQS em `http://localstack:4566` (credenciais `test/test`)
+- service-portal-manager em `http://manager:8082`
 
 ---
 
@@ -247,13 +242,13 @@ Sobe os serviços:
 
 | Serviço | Porta | Descrição |
 |---|---|---|
-| MongoDB 7 | 27017 | Persistência (DatabaseIntegrationExecutor + collection `workflows` gerenciada pelo Manager) |
 | **Redis 7** | 6379 | Cache de workflows ativos do orquestrador (TTL 1h) |
 | RabbitMQ 3 | 5672 / 15672 | Broker + Management UI |
 | Kafka (Bitnami 3.7, KRaft) | 9092 | Broker |
 | LocalStack 3 (opcional) | 4566 | Emulador AWS SQS |
 | **WireMock** | **18080** (admin/host) | Simulador de APIs HTTP externas — alias `api.exemplo.com` na rede `portal` |
 | **service-portal-manager** | 8082 | Dono da collection `workflows` — fonte de YAML para o orquestrador |
+| MongoDB 7 | 27017 | (Não consumido pelo orquestrador) usado apenas pelo `service-portal-manager` |
 
 ### WireMock — APIs externas simuladas
 
@@ -269,14 +264,6 @@ curl http://localhost:18080/__admin/requests     # últimas chamadas recebidas
 ```
 
 Detalhes e como adicionar novos stubs: [`wiremock/README.md`](../wiremock/README.md).
-
-### Inicialização do MongoDB
-
-O diretório `mongodb-workflows/` é montado em `/docker-entrypoint-initdb.d` do container MongoDB. Na primeira inicialização (volume vazio), o script `init-mongo.js` é executado automaticamente e:
-
-1. Cria o database `generic-orchestrator`
-2. Cria a collection `workflows`
-3. Cria índice composto único em `id` + `versao`
 
 ---
 
@@ -331,7 +318,7 @@ Para criar/atualizar/listar fluxos, ver [`service-portal-manager/README.md`](../
 
 ```yaml
 fluxo:
-  id: "meu-fluxo"           # Obrigatório, único no MongoDB
+  id: "meu-fluxo"           # Obrigatório, único por (id, versao) no Manager
   descricao: "Descrição"
   versao: "1.0.0"
   ativo: true
@@ -350,7 +337,7 @@ fluxo:
   integracoes:
     - id: "buscar-dados"     # ID identifica o passo e faz match com orch-integrations
       ordem: 1
-      tipo: HTTP             # HTTP | QUEUE | DATABASE
+      tipo: HTTP             # HTTP | QUEUE
       continuarEmErro: false
       http: ...
 
@@ -441,24 +428,7 @@ fluxo:
       {"evento":"CRIADO"}
 ```
 
-### Integração DATABASE (MongoDB)
-
-```yaml
-- id: "salvar-registro"
-  ordem: 2
-  tipo: DATABASE
-  continuarEmErro: false
-  database:
-    operacao: INSERT         # INSERT | FIND_ONE | FIND_MANY | UPDATE | DELETE
-    colecao: "minha-colecao"
-    documentoTemplate: |
-      {"campo":"{{contrato.campo}}","ts":"{{now()}}"}
-    filtroTemplate: |        # Para FIND, UPDATE, DELETE
-      {"_id":"{{contrato.id}}"}
-    mapeamentoResposta:
-      campoOrigem: "_id"
-      campoDestino: "registroId"
-```
+> **Persistência de dados de domínio**: o orquestrador **não tem mais integração de banco de dados**. Para gravar registros (pedidos, eventos, etc.), os workflows chamam APIs HTTP de serviços downstream (passo `tipo: HTTP`, método `POST`/`PUT`). Veja [docs/example-flow.yml](docs/example-flow.yml) para o exemplo `salvar-pedido` via `POST /pedidos`.
 
 ### Resolução de templates
 
@@ -578,10 +548,8 @@ curl -X POST http://localhost:8080/api/orchestrate/v1/consulta-cursos-aluno \
 
 ---
 
-## MongoDB
+## Persistência
 
-- **Database:** `generic-orchestrator`
-- **Collection:** `workflows`
-- **Índice:** composto único em `id` + `versao` (criado pelo `init-mongo.js`)
+O orquestrador **não tem dependência direta de banco de dados**. Workflows são fornecidos pelo [`service-portal-manager`](../service-portal-manager/) (que possui a collection `workflows` no MongoDB) e ficam em cache no Redis com TTL 1h.
 
-A collection é gerenciada via `FlowDefinitionRepository` (Spring Data MongoDB). Os documentos armazenam a definição completa do fluxo, incluindo contrato e integrações. O índice composto permite múltiplas versões de um mesmo `id` coexistirem; o segmento `version` na URL `/api/orchestrate/{version}/{flowId}` direciona qual delas será executada.
+Persistência de dados de domínio (pedidos, eventos, registros) acontece nos serviços downstream chamados pelos passos `HTTP`/`QUEUE` do workflow.

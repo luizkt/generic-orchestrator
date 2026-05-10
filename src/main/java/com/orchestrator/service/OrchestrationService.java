@@ -88,7 +88,6 @@ public class OrchestrationService {
     private Object applyMapping(IntegrationDefinition i, Object result) {
         var mapping = switch (i.getTipo()) {
             case HTTP -> i.getHttp() != null ? i.getHttp().getMapeamentoResposta() : null;
-            case DATABASE -> i.getDatabase() != null ? i.getDatabase().getMapeamentoResposta() : null;
             default -> null;
         };
         if (mapping == null || mapping.getCampoOrigem() == null) return result;
