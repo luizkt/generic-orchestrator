@@ -21,8 +21,8 @@ public class RabbitMqPublisher {
         RabbitTemplate template = rabbitTemplates.get(integrationId);
         if (template == null)
             throw new IntegrationExecutionException(
-                    "Nenhuma configuração RabbitMQ encontrada para o id '" + integrationId +
-                    "'. Verifique orch-integrations.rabbitmqs no application.yml");
+                    "No RabbitMQ configuration found for id '" + integrationId +
+                    "'. Check orch-integrations.rabbitmqs in application.yml");
 
         String exchange = cfg.getExchange() != null ? cfg.getExchange() : "";
         String rk = cfg.getRoutingKey() != null ? cfg.getRoutingKey() : "";
@@ -30,7 +30,7 @@ public class RabbitMqPublisher {
         log.info("[RABBITMQ] id={} exchange={} routingKey={}", integrationId, exchange, rk);
         template.convertAndSend(exchange, rk, message, m -> {
             m.getMessageProperties().setDeliveryMode(
-                    cfg.isPersistente() ? MessageDeliveryMode.PERSISTENT : MessageDeliveryMode.NON_PERSISTENT);
+                    cfg.isPersistent() ? MessageDeliveryMode.PERSISTENT : MessageDeliveryMode.NON_PERSISTENT);
             return m;
         });
         return Map.of("provider", "RABBITMQ", "integrationId", integrationId,

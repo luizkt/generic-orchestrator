@@ -46,10 +46,10 @@ public class HttpIntegrationExecutor implements IntegrationExecutor {
     @SuppressWarnings("unchecked")
     public Object execute(IntegrationDefinition def, FlowExecutionContext ctx) {
         HttpIntegrationConfig http = def.getHttp();
-        if (http == null) throw new IntegrationExecutionException("Configuração HTTP ausente: " + def.getId());
+        if (http == null) throw new IntegrationExecutionException("HTTP config missing: " + def.getId());
 
         String url = templateResolver.resolve(http.getUrl(), ctx);
-        String method = http.getMetodo() != null ? http.getMetodo().toUpperCase() : "GET";
+        String method = http.getMethod() != null ? http.getMethod().toUpperCase() : "GET";
         String body = http.getBodyTemplate() != null ? templateResolver.resolve(http.getBodyTemplate(), ctx) : null;
         long timeout = http.getTimeout() > 0 ? http.getTimeout()
                 : properties.getRetryConfiguration().getTimeout();
@@ -82,11 +82,11 @@ public class HttpIntegrationExecutor implements IntegrationExecutor {
             try { return objectMapper.readValue(resp, Map.class); }
             catch (Exception e) { return Map.of("response", resp); }
         } catch (CallNotPermittedException e) {
-            log.error("[HTTP] Circuit breaker aberto para '{}': {}", def.getId(), e.getMessage());
-            throw new IntegrationExecutionException("Circuit breaker aberto para: " + def.getId(), e);
+            log.error("[HTTP] Circuit breaker open for '{}': {}", def.getId(), e.getMessage());
+            throw new IntegrationExecutionException("Circuit breaker open for: " + def.getId(), e);
         } catch (Exception e) {
-            log.error("[HTTP] Erro após esgotamento de retries em '{}': {}", def.getId(), e.getMessage());
-            throw new IntegrationExecutionException("Falha na integração HTTP: " + def.getId(), e);
+            log.error("[HTTP] Error after retries exhausted for '{}': {}", def.getId(), e.getMessage());
+            throw new IntegrationExecutionException("HTTP integration failed: " + def.getId(), e);
         }
     }
 

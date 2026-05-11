@@ -2,6 +2,6 @@ package com.orchestrator.domain.model;
 import lombok.Data;
 @Data
 public class ResponseMapping {
-    private String campoDestino;
-    private String campoOrigem;
+    private String targetField;
+    private String sourceField;
 }

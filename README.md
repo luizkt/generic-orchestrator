@@ -54,7 +54,7 @@ src/main/java/com/orchestrator/
 │   └── JacksonConfig.java
 ├── manager/                                       # Integração com service-portal-manager
 │   ├── ManagerAuthService.java                    # Login server-to-server + cache de token
-│   ├── ManagerWorkflowClient.java                 # GET /manager/workflows/active e .../yaml
+│   ├── ManagerWorkflowClient.java                 # GET /manager/flows?status=active e .../yaml
 │   ├── WorkflowSummary.java                       # DTO da lista de ativos
 │   ├── WorkflowCacheService.java                  # @Cacheable: cache miss → Manager → parse
 │   └── WorkflowCacheWarmer.java                   # @ApplicationReadyEvent: popula o Redis
@@ -169,11 +169,11 @@ Workflows não são mais armazenados localmente — o orquestrador **consome** d
   │ ApplicationReadyEvt  │                  │       │                 │
   └─────────┬────────────┘                  │       ▼                 │
             │                               │ WorkflowCacheService    │
-            ▼                               │   .load(flowId, versao) │
+            ▼                               │   .load(flowId, version) │
   ┌──────────────────────┐                  │       │                 │
   │ Manager              │                  │       ▼                 │
   │ /workflows/active    │                  │   Redis lookup          │
-  │ → para cada ativo:   │                  │       │                 │
+  │ → para cada active:   │                  │       │                 │
   │   .load(id, ver)     │                  │ HIT? ─yes→ FlowDefinition│
   └─────────┬────────────┘                  │   no                    │
             │                               │       ▼                 │
@@ -184,10 +184,10 @@ Workflows não são mais armazenados localmente — o orquestrador **consome** d
                                             └─────────────────────────┘
 ```
 
-- **Cache key**: `workflows::{flowId}_{versao}` (Spring Cache + Redis serialização Jackson)
+- **Cache key**: `workflows::{flowId}_{version}` (Spring Cache + Redis serialização Jackson)
 - **TTL**: 1h por padrão (configurável via `orchestrator.cache.workflows.ttl-seconds`)
 - **Conteúdo cacheado**: `FlowDefinition` parseado (não o YAML cru) — economiza CPU em execuções repetidas
-- **Invalidação**: somente por TTL. Se um workflow for atualizado no Manager, o orquestrador pode usar versão obsoleta por até 1h. Para invalidar manualmente, usar `WorkflowCacheService.evict(flowId, versao)` ou `evictAll()`
+- **Invalidação**: somente por TTL. Se um workflow for atualizado no Manager, o orquestrador pode usar versão obsoleta por até 1h. Para invalidar manualmente, usar `WorkflowCacheService.evict(flowId, version)` ou `evictAll()`
 - **Warm-up**: opcional via `orchestrator.cache.workflows.warm-up-enabled` (default `true`). Se desabilitado ou se o Manager estiver indisponível na inicialização, o orquestrador faz lazy-load no primeiro request — não bloqueia o startup
 - **Falhas**: cache miss + Manager 404 → `FlowNotFoundException` no fluxo de execução; cache miss + Manager 5xx → `WebClientResponseException` propagado
 
@@ -295,7 +295,7 @@ Todos os endpoints (exceto `/api/auth/**` e `/actuator/health`) exigem `Authoriz
 ### Autenticação
 
 ```bash
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://localhost:8080/api/auth/tokens \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin"}'
 ```
@@ -306,8 +306,8 @@ curl -X POST http://localhost:8080/api/auth/login \
 
 | Método | Endpoint | Descrição |
 |---|---|---|
-| POST | `/api/auth/login` | Gera token JWT (server-to-server) |
-| POST | `/api/orchestrate/{version}/{flowId}` | Executa fluxo com payload JSON. Carrega o `FlowDefinition` via Redis cache (cache miss → consulta Manager) |
+| POST | `/api/auth/tokens` | Gera token JWT (server-to-server) |
+| POST | `/api/flows/{flowId}/versions/{version}/executions` | Executa fluxo com payload JSON. Carrega o `FlowDefinition` via Redis cache (cache miss → consulta Manager) |
 | GET | `/actuator/health` | Health check (público) |
 
 Para criar/atualizar/listar fluxos, ver [`service-portal-manager/README.md`](../service-portal-manager/README.md).
@@ -317,39 +317,39 @@ Para criar/atualizar/listar fluxos, ver [`service-portal-manager/README.md`](../
 ## Formato do Workflow (YAML)
 
 ```yaml
-fluxo:
-  id: "meu-fluxo"           # Obrigatório, único por (id, versao) no Manager
-  descricao: "Descrição"
-  versao: "1.0.0"
-  ativo: true
+flow:
+  id: "my-flow"             # Required, unique by (flowId, version) in Manager
+  description: "Description"
+  version: "1.0.0"
+  active: true
 
-  contrato:                  # Validação do payload de entrada
-    campos:
-      - nome: "campo"
-        tipo: STRING         # STRING | INTEGER | DECIMAL | BOOLEAN | OBJECT | ARRAY
-        obrigatorio: true
-        validacoes:
-          - tipo: NOT_BLANK
-          - tipo: PATTERN
-            valor: "^[0-9]{11}$"
-            mensagem: "Formato inválido"
+  contract:                  # Input payload validation
+    fields:
+      - name: "field"
+        type: STRING         # STRING | INTEGER | DECIMAL | BOOLEAN | OBJECT | ARRAY
+        required: true
+        validations:
+          - type: NOT_BLANK
+          - type: PATTERN
+            value: "^[0-9]{11}$"
+            message: "Invalid format"
 
-  integracoes:
-    - id: "buscar-dados"     # ID identifica o passo e faz match com orch-integrations
-      ordem: 1
-      tipo: HTTP             # HTTP | QUEUE
-      continuarEmErro: false
+  integrations:
+    - id: "fetch-data"       # ID identifies the step and matches orch-integrations
+      order: 1
+      type: HTTP             # HTTP | QUEUE
+      continueOnError: false
       http: ...
 
-    - id: "kafka-user-tracking"   # ID deve existir em orch-integrations.kafkas
-      ordem: 2
-      tipo: QUEUE
-      provider: KAFKA             # Nível principal: KAFKA | RABBITMQ | SQS
-      continuarEmErro: true
+    - id: "kafka-user-tracking"   # ID must exist in orch-integrations.kafkas
+      order: 2
+      type: QUEUE
+      provider: KAFKA             # Top-level: KAFKA | RABBITMQ | SQS
+      continueOnError: true
       queue:
-        topic: "meu-topico"
-        mensagemTemplate: |
-          {"documento":"{{contrato.documento}}"}
+        topic: "my-topic"
+        messageTemplate: |
+          {"document":"{{contract.document}}"}
 ```
 
 ### Tipos de campo (`FieldType`)
@@ -363,10 +363,10 @@ fluxo:
 | `NOT_BLANK` | String não vazia | — |
 | `NOT_EMPTY` | Coleção não vazia | — |
 | `NOT_NULL` | Valor não nulo | — |
-| `PATTERN` | Regex | `valor` (regex), `mensagem` |
+| `PATTERN` | Regex | `value` (regex), `message` |
 | `SIZE` | Tamanho mínimo/máximo | `min`, `max` |
-| `MIN` | Valor numérico mínimo | `valor` |
-| `MAX` | Valor numérico máximo | `valor` |
+| `MIN` | Valor numérico mínimo | `value` |
+| `MAX` | Valor numérico máximo | `value` |
 | `POSITIVE` | Número positivo | — |
 | `NEGATIVE` | Número negativo | — |
 | `EMAIL` | Formato de e-mail | — |
@@ -374,69 +374,69 @@ fluxo:
 ### Integração HTTP
 
 ```yaml
-- id: "buscar-cliente"
-  ordem: 1
-  tipo: HTTP
-  continuarEmErro: false
+- id: "fetch-client"
+  order: 1
+  type: HTTP
+  continueOnError: false
   http:
-    url: "http://localhost:8080/v1/clientes/{{contrato.documento}}/cursos"
-    metodo: GET              # GET | POST | PUT | DELETE | PATCH
+    url: "http://api.example.com/clients/{{contract.clientId}}"
+    method: GET              # GET | POST | PUT | DELETE | PATCH
     headers:
       Accept: "application/json"
-    bodyTemplate: |          # Opcional, para POST/PUT
-      {"nome":"{{contrato.nome}}"}
-    timeout: 5000            # ms, padrão 30000
-    mapeamentoResposta:
-      campoOrigem: "cursos"  # Extrai do response JSON
-      campoDestino: "cursos" # Armazena no contexto de execução
+    bodyTemplate: |          # Optional, for POST/PUT
+      {"name":"{{contract.name}}"}
+    timeout: 5000            # ms, default 30000
+    responseMapping:
+      sourceField: "name"    # Extract from response JSON
+      targetField: "clientName" # Store in execution context
 ```
 
 ### Integração QUEUE
 
 ```yaml
-- id: "kafka-user-tracking"        # Deve corresponder ao id em orch-integrations.kafkas
-  ordem: 2
-  tipo: QUEUE
-  provider: KAFKA                  # Obrigatório no nível principal
-  continuarEmErro: true
+- id: "kafka-user-tracking"        # Must match id in orch-integrations.kafkas
+  order: 2
+  type: QUEUE
+  provider: KAFKA                  # Required at top level
+  continueOnError: true
   queue:
-    topic: "meu-topico"
-    key: "chave-opcional"
-    mensagemTemplate: |
-      {"documento":"{{contrato.documento}}"}
+    topic: "my-topic"
+    key: "optional-key"
+    messageTemplate: |
+      {"document":"{{contract.document}}"}
 
-- id: "rabbitmq-notifier"          # Deve corresponder ao id em orch-integrations.rabbitmqs
-  ordem: 3
-  tipo: QUEUE
+- id: "rabbitmq-notifier"          # Must match id in orch-integrations.rabbitmqs
+  order: 3
+  type: QUEUE
   provider: RABBITMQ
-  continuarEmErro: true
+  continueOnError: true
   queue:
-    exchange: "minha.exchange"
-    routingKey: "evento.criado"
-    persistente: true
-    mensagemTemplate: |
-      {"evento":"CRIADO"}
+    exchange: "my.exchange"
+    routingKey: "event.created"
+    persistent: true
+    messageTemplate: |
+      {"event":"CREATED"}
 
-- id: "notificar-sqs"
-  ordem: 4
-  tipo: QUEUE
+- id: "sqs-notifier"
+  order: 4
+  type: QUEUE
   provider: SQS
-  continuarEmErro: true
+  continueOnError: true
   queue:
-    queueUrl: "https://sqs.us-east-1.amazonaws.com/123/minha-fila"
-    mensagemTemplate: |
-      {"evento":"CRIADO"}
+    queueUrl: "https://sqs.us-east-1.amazonaws.com/123/my-queue"
+    messageTemplate: |
+      {"event":"CREATED"}
 ```
 
-> **Persistência de dados de domínio**: o orquestrador **não tem mais integração de banco de dados**. Para gravar registros (pedidos, eventos, etc.), os workflows chamam APIs HTTP de serviços downstream (passo `tipo: HTTP`, método `POST`/`PUT`). Veja [docs/example-flow.yml](docs/example-flow.yml) para o exemplo `salvar-pedido` via `POST /pedidos`.
+> **Persistência de dados de domínio**: o orquestrador **não tem mais integração de banco de dados**. Para gravar registros (pedidos, eventos, etc.), os workflows chamam APIs HTTP de serviços downstream (passo `type: HTTP`, método `POST`/`PUT`). Veja [docs/example-flow.yml](docs/example-flow.yml) para o exemplo `save-order` via `POST /orders`.
 
 ### Resolução de templates
 
 | Expressão | Descrição |
 |---|---|
-| `{{contrato.campo}}` | Campo do payload de entrada |
-| `{{contrato.objeto.campo}}` | Campo aninhado (dot-notation) |
-| `{{integracoes.stepId.campo}}` | Resultado de um passo anterior |
+| `{{contract.campo}}` | Campo do payload de entrada |
+| `{{contract.objeto.campo}}` | Campo aninhado (dot-notation) |
+| `{{integrations.stepId.campo}}` | Resultado de um passo anterior |
 | `{{now()}}` | Timestamp atual (ISO-8601) |
 
 ---
@@ -445,104 +445,78 @@ fluxo:
 
 Veja [docs/example-flow.yml](docs/example-flow.yml).
 
-**Caso de uso — consulta de cursos de um aluno:**
+**Use case — order creation flow** (mirror of [docs/example-flow.yml](docs/example-flow.yml)):
 
 ```yaml
-fluxo:
-  id: "consulta-cursos-aluno"
-  descricao: "Consulta cursos e notifica via Kafka"
-  versao: "1.0.0"
-  ativo: true
+flow:
+  id: "create-order-v1"
+  description: "Order creation flow"
+  version: "1.0.0"
+  active: true
 
-  contrato:
-    campos:
-      - nome: "aluno"
-        tipo: OBJECT
-        obrigatorio: true
-        objeto:
-          campos:
-            - nome: "nome"
-              tipo: STRING
-              obrigatorio: true
-              validacoes:
-                - tipo: NOT_BLANK
-            - nome: "documento"
-              tipo: STRING
-              obrigatorio: true
-              validacoes:
-                - tipo: NOT_BLANK
-                - tipo: PATTERN
-                  valor: "^[0-9]{11}$"
-                  mensagem: "Documento deve conter 11 dígitos numéricos"
-            - nome: "tipo_documento"
-              tipo: STRING
-              obrigatorio: true
-              validacoes:
-                - tipo: NOT_BLANK
+  contract:
+    fields:
+      - name: "clientId"
+        type: STRING
+        required: true
+        validations:
+          - type: NOT_BLANK
+          - type: PATTERN
+            value: "^[A-Z0-9]{6,20}$"
+            message: "Invalid clientId"
+      - name: "amount"
+        type: DECIMAL
+        required: true
+        validations:
+          - type: POSITIVE
 
-  integracoes:
-    - id: "buscar-cursos"
-      ordem: 1
-      tipo: HTTP
-      continuarEmErro: false
+  integrations:
+    - id: "validate-client"
+      order: 1
+      type: HTTP
+      continueOnError: false
       http:
-        url: "http://localhost:8080/v1/clientes/{{contrato.aluno.documento}}/cursos"
-        metodo: GET
-        headers:
-          Accept: "application/json"
+        url: "http://api.exemplo.com/clients/{{contract.clientId}}"
+        method: GET
         timeout: 5000
-        mapeamentoResposta:
-          campoOrigem: "cursos"
-          campoDestino: "cursos"
 
-    - id: "kafka-user-tracking"     # match com orch-integrations.kafkas[id=kafka-user-tracking]
-      ordem: 2
-      tipo: QUEUE
-      provider: KAFKA
-      continuarEmErro: true
-      queue:
-        topic: "consultas-cursos-clientes"
-        mensagemTemplate: |
-          {"documento":"{{contrato.aluno.documento}}"}
+    - id: "save-order"
+      order: 2
+      type: HTTP
+      continueOnError: false
+      http:
+        url: "http://api.exemplo.com/orders"
+        method: POST
+        bodyTemplate: |
+          {"clientId":"{{contract.clientId}}","amount":"{{contract.amount}}","status":"CREATED"}
+        timeout: 5000
+        responseMapping:
+          targetField: "orderId"
+          sourceField: "id"
 ```
 
-**Payload de execução (note `version` no path):**
+**Execution request (note new REST path):**
 
 ```bash
-curl -X POST http://localhost:8080/api/orchestrate/v1/consulta-cursos-aluno \
+curl -X POST http://localhost:8080/api/flows/create-order-v1/versions/1.0.0/executions \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
-  -d '{
-    "aluno": {
-      "nome": "John Joe",
-      "documento": "12345678910",
-      "tipo_documento": "CPF"
-    }
-  }'
+  -d '{"clientId":"ABC123","amount":99.90}'
 ```
 
-**Resposta:**
+**Response:**
 
 ```json
 {
-  "executionId": "uuid-aqui",
-  "flowId": "consulta-cursos-aluno",
+  "executionId": "uuid-here",
+  "flowId": "create-order-v1",
   "status": "SUCCESS",
-  "resultado": {
-    "buscar-cursos": {
-      "cursos": [...]
-    },
-    "kafka-user-tracking": {
-      "provider": "KAFKA",
-      "integrationId": "kafka-user-tracking",
-      "topic": "consultas-cursos-clientes",
-      "partition": 0,
-      "offset": 42,
-      "published": true
-    }
+  "result": {
+    "validate-client": { "clientId": "ABC123", "name": "..." },
+    "save-order":      { "orderId": "ord-XYZ" }
   },
-  "iniciadoEm": "2026-05-09T10:00:00",
-  "finalizadoEm": "2026-05-09T10:00:00.123"
+  "startedAt": "2026-05-10T10:00:00",
+  "finishedAt": "2026-05-10T10:00:00.123"
 }
 ```
 

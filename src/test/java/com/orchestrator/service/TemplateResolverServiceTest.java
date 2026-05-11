@@ -19,22 +19,22 @@ class TemplateResolverServiceTest {
     @Test @DisplayName("Resolve placeholder simples do contrato")
     void deveResolverContrato() {
         FlowExecutionContext ctx = new FlowExecutionContext();
-        ctx.setContrato(Map.of("nome", "João"));
-        assertThat(service.resolve("Olá {{contrato.nome}}!", ctx)).isEqualTo("Olá João!");
+        ctx.setContract(Map.of("nome", "João"));
+        assertThat(service.resolve("Olá {{contract.nome}}!", ctx)).isEqualTo("Olá João!");
     }
 
     @Test @DisplayName("Resolve placeholder de integração anterior")
     void deveResolverIntegracao() {
         FlowExecutionContext ctx = new FlowExecutionContext();
         ctx.putIntegrationResult("etapa1", Map.of("id", "ABC123"));
-        assertThat(service.resolve("ID: {{integracoes.etapa1.id}}", ctx)).isEqualTo("ID: ABC123");
+        assertThat(service.resolve("ID: {{integrations.etapa1.id}}", ctx)).isEqualTo("ID: ABC123");
     }
 
     @Test @DisplayName("Resolve múltiplos placeholders")
     void deveResolverMultiplos() {
         FlowExecutionContext ctx = new FlowExecutionContext();
-        ctx.setContrato(Map.of("a", "1", "b", "2"));
-        assertThat(service.resolve("{{contrato.a}}-{{contrato.b}}", ctx)).isEqualTo("1-2");
+        ctx.setContract(Map.of("a", "1", "b", "2"));
+        assertThat(service.resolve("{{contract.a}}-{{contract.b}}", ctx)).isEqualTo("1-2");
     }
 
     @Test @DisplayName("Resolve now()")
@@ -47,8 +47,8 @@ class TemplateResolverServiceTest {
     @Test @DisplayName("Retorna vazio quando placeholder não encontrado")
     void deveTratarPlaceholderInexistente() {
         FlowExecutionContext ctx = new FlowExecutionContext();
-        ctx.setContrato(Map.of());
-        assertThat(service.resolve("X={{contrato.inexistente}}", ctx)).isEqualTo("X=");
+        ctx.setContract(Map.of());
+        assertThat(service.resolve("X={{contract.inexistente}}", ctx)).isEqualTo("X=");
     }
 
     @Test @DisplayName("Template sem placeholders permanece igual")

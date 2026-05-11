@@ -9,26 +9,33 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+/**
+ * Executes a workflow.
+ *
+ * REST-shape: POST creates a new resource in the sub-collection {@code executions}
+ * of {@code /api/flows/{flowId}/versions/{version}}. After the REST refactor the
+ * {@code orchestrate} verb was removed from the path.
+ */
 @RestController
-@RequestMapping("/api/orchestrate")
+@RequestMapping("/api/flows")
 @RequiredArgsConstructor
 public class OrchestrationController {
 
     private final OrchestrationService orchestrationService;
 
-    @PostMapping("/{version}/{flowId}")
-    public ResponseEntity<OrchestrationResponse> orchestrate(@PathVariable String version,
-                                                             @PathVariable String flowId,
-                                                             @RequestBody Map<String, Object> payload) {
+    @PostMapping("/{flowId}/versions/{version}/executions")
+    public ResponseEntity<OrchestrationResponse> execute(@PathVariable String flowId,
+                                                         @PathVariable String version,
+                                                         @RequestBody Map<String, Object> payload) {
         FlowExecutionResult r = orchestrationService.execute(version, flowId, payload);
         return ResponseEntity.ok(OrchestrationResponse.builder()
                 .executionId(r.getExecutionId())
                 .flowId(r.getFlowId())
                 .status(r.getStatus())
-                .resultado(r.getResultado())
+                .result(r.getResult())
                 .errorMessage(r.getErrorMessage())
-                .iniciadoEm(r.getIniciadoEm())
-                .finalizadoEm(r.getFinalizadoEm())
+                .startedAt(r.getStartedAt())
+                .finishedAt(r.getFinishedAt())
                 .build());
     }
 }

@@ -24,133 +24,132 @@ class YamlParserServiceTest {
     void setUp() { service = new YamlParserService(); }
 
     @Test
-    @DisplayName("Deve parsear YAML válido com contrato e integrações")
-    void deveParsearYamlValido() {
+    @DisplayName("Parses a valid YAML with contract and integrations")
+    void parsesValidYaml() {
         String yaml = """
-            fluxo:
+            flow:
               id: "test-flow-v1"
-              descricao: "Teste"
-              versao: "1.0.0"
-              ativo: true
-              contrato:
-                campos:
-                  - nome: "campo1"
-                    tipo: STRING
-                    obrigatorio: true
-              integracoes:
+              description: "Test"
+              version: "1.0.0"
+              active: true
+              contract:
+                fields:
+                  - name: "field1"
+                    type: STRING
+                    required: true
+              integrations:
                 - id: "int1"
-                  ordem: 1
-                  tipo: HTTP
+                  order: 1
+                  type: HTTP
                   http:
                     url: "http://test.com"
-                    metodo: GET
+                    method: GET
             """;
         FlowDefinition def = service.parse(yaml);
 
         assertThat(def.getFlowId()).isEqualTo("test-flow-v1");
-        assertThat(def.isAtivo()).isTrue();
-        assertThat(def.getContrato().getCampos()).hasSize(1);
-        assertThat(def.getContrato().getCampos().get(0).getTipo()).isEqualTo(FieldType.STRING);
-        assertThat(def.getIntegracoes()).hasSize(1);
-        assertThat(def.getIntegracoes().get(0).getTipo()).isEqualTo(IntegrationType.HTTP);
+        assertThat(def.isActive()).isTrue();
+        assertThat(def.getContract().getFields()).hasSize(1);
+        assertThat(def.getContract().getFields().get(0).getType()).isEqualTo(FieldType.STRING);
+        assertThat(def.getIntegrations()).hasSize(1);
+        assertThat(def.getIntegrations().get(0).getType()).isEqualTo(IntegrationType.HTTP);
     }
 
     @Test
-    @DisplayName("Deve falhar quando 'fluxo' não está presente")
-    void deveFalharSemChaveFluxo() {
-        assertThatThrownBy(() -> service.parse("outracoisa:\n  id: x"))
+    @DisplayName("Fails when 'flow' root key is missing")
+    void failsWithoutFlowKey() {
+        assertThatThrownBy(() -> service.parse("other:\n  id: x"))
                 .isInstanceOf(InvalidFlowDefinitionException.class)
-                .hasMessageContaining("'fluxo'");
+                .hasMessageContaining("'flow'");
     }
 
     @Test
-    @DisplayName("Deve falhar quando id está ausente")
-    void deveFalharSemId() {
+    @DisplayName("Fails when id is missing")
+    void failsWithoutId() {
         String yaml = """
-            fluxo:
-              contrato:
-                campos: []
-              integracoes:
+            flow:
+              contract:
+                fields: []
+              integrations:
                 - id: x
-                  ordem: 1
-                  tipo: HTTP
+                  order: 1
+                  type: HTTP
             """;
         assertThatThrownBy(() -> service.parse(yaml))
                 .isInstanceOf(InvalidFlowDefinitionException.class)
-                .hasMessageContaining("'id'");
+                .hasMessageContaining("'flow.id'");
     }
 
     @Test
-    @DisplayName("Deve falhar quando integrações estão vazias")
-    void deveFalharSemIntegracoes() {
+    @DisplayName("Fails when integrations is empty")
+    void failsWithoutIntegrations() {
         String yaml = """
-            fluxo:
+            flow:
               id: "x"
-              contrato:
-                campos: []
+              contract:
+                fields: []
             """;
         assertThatThrownBy(() -> service.parse(yaml))
                 .isInstanceOf(InvalidFlowDefinitionException.class)
-                .hasMessageContaining("integração");
+                .hasMessageContaining("integration");
     }
 
     @Test
-    @DisplayName("Deve parsear YAML com provider Kafka no nível principal da integração")
-    void deveParsearComKafka() {
+    @DisplayName("Parses YAML with Kafka provider at integration level")
+    void parsesWithKafka() {
         String yaml = """
-            fluxo:
+            flow:
               id: "kafka-flow"
-              contrato:
-                campos: []
-              integracoes:
+              contract:
+                fields: []
+              integrations:
                 - id: "k1"
-                  ordem: 1
-                  tipo: QUEUE
+                  order: 1
+                  type: QUEUE
                   provider: KAFKA
                   queue:
                     topic: "events"
             """;
         FlowDefinition d = service.parse(yaml);
-        assertThat(d.getIntegracoes().get(0).getProvider().name()).isEqualTo("KAFKA");
-        assertThat(d.getIntegracoes().get(0).getQueue().getTopic()).isEqualTo("events");
+        assertThat(d.getIntegrations().get(0).getProvider().name()).isEqualTo("KAFKA");
+        assertThat(d.getIntegrations().get(0).getQueue().getTopic()).isEqualTo("events");
     }
 
     @Test
-    @DisplayName("docs/example-flow.yml: parse e estrutura conferem com o WireMock simulado")
-    void exemploFlowYamlEstaConsistenteComWiremock() throws Exception {
-        // Arquivo entregue como documentação e usado no docker-compose com WireMock.
+    @DisplayName("docs/example-flow.yml: parse and structure match the WireMock setup")
+    void exampleFlowYamlIsConsistentWithWiremock() throws Exception {
         // Garante que: (1) o YAML é parseável; (2) a URL HTTP aponta para api.exemplo.com
         //   (alias do container WireMock); (3) provider está no nível da integração
         //   (não dentro de queue); (4) integrações QUEUE têm provider definido.
         String yaml = Files.readString(Path.of("docs/example-flow.yml"));
         FlowDefinition d = service.parse(yaml);
 
-        assertThat(d.getFlowId()).isEqualTo("criar-pedido-v1");
-        assertThat(d.getVersao()).isEqualTo("1.0.0");
-        assertThat(d.isAtivo()).isTrue();
-        assertThat(d.getContrato().getCampos()).hasSize(2);
-        assertThat(d.getIntegracoes()).hasSize(5);
+        assertThat(d.getFlowId()).isEqualTo("create-order-v1");
+        assertThat(d.getVersion()).isEqualTo("1.0.0");
+        assertThat(d.isActive()).isTrue();
+        assertThat(d.getContract().getFields()).hasSize(2);
+        assertThat(d.getIntegrations()).hasSize(5);
 
-        IntegrationDefinition http = d.getIntegracoes().get(0);
-        assertThat(http.getTipo()).isEqualTo(IntegrationType.HTTP);
+        IntegrationDefinition http = d.getIntegrations().get(0);
+        assertThat(http.getType()).isEqualTo(IntegrationType.HTTP);
         assertThat(http.getHttp().getUrl())
-                .as("URL deve apontar para o alias WireMock (HTTP, sem TLS)")
-                .startsWith("http://api.exemplo.com/clientes/")
+                .as("URL must point to WireMock alias (HTTP, no TLS)")
+                .startsWith("http://api.exemplo.com/clients/")
                 .doesNotStartWith("https://");
-        assertThat(http.getHttp().getMetodo()).isEqualTo("GET");
+        assertThat(http.getHttp().getMethod()).isEqualTo("GET");
 
-        IntegrationDefinition salvar = d.getIntegracoes().get(1);
-        assertThat(salvar.getTipo()).isEqualTo(IntegrationType.HTTP);
-        assertThat(salvar.getHttp().getMetodo()).isEqualTo("POST");
-        assertThat(salvar.getHttp().getUrl()).isEqualTo("http://api.exemplo.com/pedidos");
+        IntegrationDefinition save = d.getIntegrations().get(1);
+        assertThat(save.getType()).isEqualTo(IntegrationType.HTTP);
+        assertThat(save.getHttp().getMethod()).isEqualTo("POST");
+        assertThat(save.getHttp().getUrl()).isEqualTo("http://api.exemplo.com/orders");
 
-        IntegrationDefinition rabbit = d.getIntegracoes().get(2);
+        IntegrationDefinition rabbit = d.getIntegrations().get(2);
         assertThat(rabbit.getProvider())
-                .as("provider deve ficar no nível da integração, não dentro de queue")
+                .as("provider must be at integration level, not inside queue")
                 .isEqualTo(QueueProvider.RABBITMQ);
-        assertThat(rabbit.getQueue().getExchange()).isEqualTo("pedidos.exchange");
+        assertThat(rabbit.getQueue().getExchange()).isEqualTo("orders.exchange");
 
-        assertThat(d.getIntegracoes().get(3).getProvider()).isEqualTo(QueueProvider.KAFKA);
-        assertThat(d.getIntegracoes().get(4).getProvider()).isEqualTo(QueueProvider.SQS);
+        assertThat(d.getIntegrations().get(3).getProvider()).isEqualTo(QueueProvider.KAFKA);
+        assertThat(d.getIntegrations().get(4).getProvider()).isEqualTo(QueueProvider.SQS);
     }
 }

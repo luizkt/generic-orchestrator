@@ -4,9 +4,9 @@ import java.util.Map;
 @Data
 public class HttpIntegrationConfig {
     private String url;
-    private String metodo;
+    private String method;
     private Map<String, String> headers;
     private String bodyTemplate;
     private int timeout;
-    private ResponseMapping mapeamentoResposta;
+    private ResponseMapping responseMapping;
 }

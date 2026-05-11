@@ -55,15 +55,15 @@ class QueueIntegrationIT extends AbstractIntegrationTest {
     void executorDelegaKafka() {
         IntegrationDefinition def = new IntegrationDefinition();
         def.setId("kafka-user-tracking");
-        def.setTipo(IntegrationType.QUEUE);
+        def.setType(IntegrationType.QUEUE);
         def.setProvider(QueueProvider.KAFKA);
         QueueIntegrationConfig cfg = new QueueIntegrationConfig();
         cfg.setTopic("delegated-topic");
-        cfg.setMensagemTemplate("{\"id\":\"{{contrato.id}}\"}");
+        cfg.setMessageTemplate("{\"id\":\"{{contract.id}}\"}");
         def.setQueue(cfg);
 
         FlowExecutionContext ctx = new FlowExecutionContext();
-        ctx.setContrato(Map.of("id", "abc"));
+        ctx.setContract(Map.of("id", "abc"));
 
         Object result = executor.execute(def, ctx);
         assertThat(result).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)

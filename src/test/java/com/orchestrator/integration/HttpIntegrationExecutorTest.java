@@ -119,16 +119,16 @@ class HttpIntegrationExecutorTest {
                 .setResponseCode(200).setBody("{\"ok\":true}"));
 
         FlowExecutionContext ctx = new FlowExecutionContext();
-        ctx.setContrato(Map.of("id", "123"));
+        ctx.setContract(Map.of("id", "123"));
 
         IntegrationDefinition def = new IntegrationDefinition();
         def.setId("test-integration");
-        def.setTipo(IntegrationType.HTTP);
+        def.setType(IntegrationType.HTTP);
         HttpIntegrationConfig http = new HttpIntegrationConfig();
         String baseUrl = "http://" + mockWebServer.getHostName() + ":" + mockWebServer.getPort();
-        http.setUrl(baseUrl + "/api/{{contrato.id}}");
-        http.setMetodo("POST");
-        http.setBodyTemplate("{\"id\":\"{{contrato.id}}\"}");
+        http.setUrl(baseUrl + "/api/{{contract.id}}");
+        http.setMethod("POST");
+        http.setBodyTemplate("{\"id\":\"{{contract.id}}\"}");
         http.setHeaders(Map.of("Content-Type", "application/json"));
         http.setTimeout(5000);
         def.setHttp(http);
@@ -149,7 +149,7 @@ class HttpIntegrationExecutorTest {
     void deveLancarErroQuandoConfigHttpAusente() {
         IntegrationDefinition def = new IntegrationDefinition();
         def.setId("missing-http");
-        def.setTipo(IntegrationType.HTTP);
+        def.setType(IntegrationType.HTTP);
 
         assertThatThrownBy(() -> executor.execute(def, new FlowExecutionContext()))
                 .isInstanceOf(IntegrationExecutionException.class)
@@ -212,7 +212,7 @@ class HttpIntegrationExecutorTest {
 
         assertThatThrownBy(() -> cbExecutor.execute(buildDef("GET", null, 5000), new FlowExecutionContext()))
                 .isInstanceOf(IntegrationExecutionException.class)
-                .hasMessageContaining("Circuit breaker aberto");
+                .hasMessageContaining("Circuit breaker open");
     }
 
     @Test @DisplayName("Listener de transição de estado do circuit breaker é acionado")
@@ -266,11 +266,11 @@ class HttpIntegrationExecutorTest {
     private IntegrationDefinition buildDef(String method, String bodyTemplate, int timeout) {
         IntegrationDefinition def = new IntegrationDefinition();
         def.setId("test-integration");
-        def.setTipo(IntegrationType.HTTP);
+        def.setType(IntegrationType.HTTP);
 
         HttpIntegrationConfig http = new HttpIntegrationConfig();
         http.setUrl(mockWebServer.url("/test").toString());
-        http.setMetodo(method);
+        http.setMethod(method);
         http.setTimeout(timeout);
         http.setBodyTemplate(bodyTemplate);
         def.setHttp(http);

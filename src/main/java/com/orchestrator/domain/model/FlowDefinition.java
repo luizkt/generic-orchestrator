@@ -12,19 +12,18 @@ import java.util.List;
  * — o YAML é mantido pelo Manager e o orquestrador apenas faz o parse para
  * executar (e cacheia o resultado parseado em Redis).
  *
- * O campo `mongoId` segue presente para compatibilidade com workflows antigos
- * que ainda venham com `_id` no YAML deserializado, mas não tem mais
- * significado de persistência.
+ * Todos os campos seguem a convenção em inglês — paths, payloads e YAML
+ * são todos em inglês após o refactor REST.
  */
 @Data
 public class FlowDefinition {
     private String mongoId;
     @JsonProperty("id") private String flowId;
-    private String descricao;
-    private String versao;
-    private boolean ativo;
-    private FlowContract contrato;
-    private List<IntegrationDefinition> integracoes;
-    private LocalDateTime criadoEm;
-    private LocalDateTime atualizadoEm;
+    private String description;
+    private String version;
+    private boolean active;
+    private FlowContract contract;
+    private List<IntegrationDefinition> integrations;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }

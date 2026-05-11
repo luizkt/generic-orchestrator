@@ -31,8 +31,8 @@ public class TemplateResolverService {
         if ("now()".equals(expr)) return LocalDateTime.now().toString();
         String[] parts = expr.split("\\.");
         Object current = switch (parts[0]) {
-            case "contrato" -> ctx.getContrato();
-            case "integracoes" -> ctx.getIntegracoes();
+            case "contract" -> ctx.getContract();
+            case "integrations" -> ctx.getIntegrations();
             default -> null;
         };
         if (current == null) return "";

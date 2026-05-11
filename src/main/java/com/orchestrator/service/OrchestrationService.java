@@ -26,48 +26,48 @@ public class OrchestrationService {
     private final ContractValidationService contractValidationService;
     private final IntegrationExecutorFactory executorFactory;
 
-    public FlowExecutionResult execute(String versao, String flowId, Map<String, Object> payload) {
+    public FlowExecutionResult execute(String version, String flowId, Map<String, Object> payload) {
         FlowExecutionContext ctx = new FlowExecutionContext();
         ctx.setExecutionId(UUID.randomUUID().toString());
         ctx.setFlowId(flowId);
-        ctx.setIniciadoEm(LocalDateTime.now());
+        ctx.setStartedAt(LocalDateTime.now());
         ctx.setStatus(ExecutionStatus.RUNNING);
-        ctx.setContrato(payload != null ? payload : Map.of());
+        ctx.setContract(payload != null ? payload : Map.of());
 
-        log.info("Iniciando execução [{}] do fluxo: {} versao: {}", ctx.getExecutionId(), flowId, versao);
+        log.info("Starting execution [{}] of flow: {} version: {}", ctx.getExecutionId(), flowId, version);
 
         try {
-            FlowDefinition def = workflowCacheService.load(flowId, versao);
-            contractValidationService.validate(def.getContrato(), ctx.getContrato());
+            FlowDefinition def = workflowCacheService.load(flowId, version);
+            contractValidationService.validate(def.getContract(), ctx.getContract());
 
-            boolean teveErro = false;
-            for (IntegrationDefinition i : def.getIntegracoes().stream()
-                    .sorted(Comparator.comparingInt(IntegrationDefinition::getOrdem)).toList()) {
+            boolean hadError = false;
+            for (IntegrationDefinition i : def.getIntegrations().stream()
+                    .sorted(Comparator.comparingInt(IntegrationDefinition::getOrder)).toList()) {
                 try {
-                    Object result = executorFactory.get(i.getTipo()).execute(i, ctx);
+                    Object result = executorFactory.get(i.getType()).execute(i, ctx);
                     ctx.putIntegrationResult(i.getId(), applyMapping(i, result));
-                    log.info("Integração '{}' OK", i.getId());
+                    log.info("Integration '{}' OK", i.getId());
                 } catch (Exception e) {
-                    if (i.isContinuarEmErro()) {
-                        log.warn("Integração '{}' falhou (continuando): {}", i.getId(), e.getMessage());
+                    if (i.isContinueOnError()) {
+                        log.warn("Integration '{}' failed (continuing): {}", i.getId(), e.getMessage());
                         ctx.putIntegrationResult(i.getId(), Map.of("error", e.getMessage()));
-                        teveErro = true;
+                        hadError = true;
                     } else {
                         throw new IntegrationExecutionException(
-                                "Integração obrigatória falhou: " + i.getId(), e);
+                                "Required integration failed: " + i.getId(), e);
                     }
                 }
             }
 
-            ctx.setStatus(teveErro ? ExecutionStatus.PARTIAL_SUCCESS : ExecutionStatus.SUCCESS);
-            ctx.setFinalizadoEm(LocalDateTime.now());
+            ctx.setStatus(hadError ? ExecutionStatus.PARTIAL_SUCCESS : ExecutionStatus.SUCCESS);
+            ctx.setFinishedAt(LocalDateTime.now());
 
             return build(ctx, null);
         } catch (Exception e) {
-            log.error("Erro na execução [{}]: {}", ctx.getExecutionId(), e.getMessage(), e);
+            log.error("Error in execution [{}]: {}", ctx.getExecutionId(), e.getMessage(), e);
             ctx.setStatus(ExecutionStatus.FAILED);
             ctx.setErrorMessage(e.getMessage());
-            ctx.setFinalizadoEm(LocalDateTime.now());
+            ctx.setFinishedAt(LocalDateTime.now());
             return build(ctx, e.getMessage());
         }
     }
@@ -77,23 +77,23 @@ public class OrchestrationService {
                 .executionId(ctx.getExecutionId())
                 .flowId(ctx.getFlowId())
                 .status(ctx.getStatus())
-                .resultado(ctx.getIntegracoes())
+                .result(ctx.getIntegrations())
                 .errorMessage(error)
-                .iniciadoEm(ctx.getIniciadoEm())
-                .finalizadoEm(ctx.getFinalizadoEm())
+                .startedAt(ctx.getStartedAt())
+                .finishedAt(ctx.getFinishedAt())
                 .build();
     }
 
     @SuppressWarnings("unchecked")
     private Object applyMapping(IntegrationDefinition i, Object result) {
-        var mapping = switch (i.getTipo()) {
-            case HTTP -> i.getHttp() != null ? i.getHttp().getMapeamentoResposta() : null;
+        var mapping = switch (i.getType()) {
+            case HTTP -> i.getHttp() != null ? i.getHttp().getResponseMapping() : null;
             default -> null;
         };
-        if (mapping == null || mapping.getCampoOrigem() == null) return result;
+        if (mapping == null || mapping.getSourceField() == null) return result;
         if (result instanceof Map<?, ?> m) {
-            Object v = ((Map<String, Object>) m).get(mapping.getCampoOrigem());
-            return Map.of(mapping.getCampoDestino() != null ? mapping.getCampoDestino() : "value",
+            Object v = ((Map<String, Object>) m).get(mapping.getSourceField());
+            return Map.of(mapping.getTargetField() != null ? mapping.getTargetField() : "value",
                     v != null ? v : "");
         }
         return result;

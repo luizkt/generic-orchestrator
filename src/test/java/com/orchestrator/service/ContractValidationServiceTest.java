@@ -21,19 +21,19 @@ class ContractValidationServiceTest {
 
     private FlowContract buildContract(FieldDefinition... f) {
         FlowContract c = new FlowContract();
-        c.setCampos(List.of(f));
+        c.setFields(List.of(f));
         return c;
     }
 
     private FieldDefinition field(String n, FieldType t, boolean req, ValidationRule... rules) {
         FieldDefinition f = new FieldDefinition();
-        f.setNome(n); f.setTipo(t); f.setObrigatorio(req); f.setValidacoes(List.of(rules));
+        f.setName(n); f.setType(t); f.setRequired(req); f.setValidations(List.of(rules));
         return f;
     }
 
     private ValidationRule rule(ValidationType t, String v) {
         ValidationRule r = new ValidationRule();
-        r.setTipo(t); r.setValor(v);
+        r.setType(t); r.setValue(v);
         return r;
     }
 
@@ -70,7 +70,7 @@ class ContractValidationServiceTest {
     @Test @DisplayName("Validação SIZE com min/max")
     void deveValidarSize() {
         ValidationRule r = new ValidationRule();
-        r.setTipo(ValidationType.SIZE); r.setMin(2); r.setMax(5);
+        r.setType(ValidationType.SIZE); r.setMin(2); r.setMax(5);
         FlowContract c = buildContract(field("nome", FieldType.STRING, true, r));
         service.validate(c, Map.of("nome", "abc"));
         assertThatThrownBy(() -> service.validate(c, Map.of("nome", "a")))

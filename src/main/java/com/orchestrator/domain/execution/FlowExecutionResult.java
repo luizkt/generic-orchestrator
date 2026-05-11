@@ -8,8 +8,8 @@ public class FlowExecutionResult {
     private String executionId;
     private String flowId;
     private ExecutionStatus status;
-    private Map<String, Object> resultado;
+    private Map<String, Object> result;
     private String errorMessage;
-    private LocalDateTime iniciadoEm;
-    private LocalDateTime finalizadoEm;
+    private LocalDateTime startedAt;
+    private LocalDateTime finishedAt;
 }

@@ -3,11 +3,11 @@ import lombok.Data;
 @Data
 public class IntegrationDefinition {
     private String id;
-    private int ordem;
-    private IntegrationType tipo;
+    private int order;
+    private IntegrationType type;
     private QueueProvider provider;
-    private String descricao;
-    private boolean continuarEmErro;
+    private String description;
+    private boolean continueOnError;
     private HttpIntegrationConfig http;
     private QueueIntegrationConfig queue;
 }

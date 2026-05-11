@@ -3,9 +3,9 @@ import lombok.Data;
 import java.util.List;
 @Data
 public class FieldDefinition {
-    private String nome;
-    private FieldType tipo;
-    private boolean obrigatorio;
-    private List<ValidationRule> validacoes;
-    private FlowContract objeto;
+    private String name;
+    private FieldType type;
+    private boolean required;
+    private List<ValidationRule> validations;
+    private FlowContract object;
 }

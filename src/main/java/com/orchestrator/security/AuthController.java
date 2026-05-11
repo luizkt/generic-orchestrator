@@ -6,6 +6,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * POST in the {@code tokens} collection creates a new JWT — REST-shape.
+ * Replaces the previous verb-based {@code /api/auth/login} path.
+ */
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -13,14 +17,14 @@ public class AuthController {
 
     private final JwtService jwtService;
 
-    @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
-        // ATENÇÃO: autenticação simplificada para fins de demonstração.
-        // Em produção, integre com banco de usuários e BCrypt.
+    @PostMapping("/tokens")
+    public ResponseEntity<LoginResponse> createToken(@RequestBody LoginRequest request) {
+        // Simplified authentication for demonstration purposes.
+        // Production: integrate with user store + BCrypt.
         if (!"admin".equals(request.getUsername()) || !"admin".equals(request.getPassword())) {
             return ResponseEntity.status(401).build();
         }
         String token = jwtService.generateToken(request.getUsername());
-        return ResponseEntity.ok(new LoginResponse(token, "Bearer"));
+        return ResponseEntity.status(201).body(new LoginResponse(token, "Bearer"));
     }
 }

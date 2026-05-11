@@ -11,8 +11,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.util.Map;
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -29,20 +27,20 @@ public class QueueIntegrationExecutor implements IntegrationExecutor {
     @Override
     public Object execute(IntegrationDefinition def, FlowExecutionContext ctx) {
         QueueIntegrationConfig q = def.getQueue();
-        if (q == null) throw new IntegrationExecutionException("Configuração QUEUE ausente: " + def.getId());
+        if (q == null) throw new IntegrationExecutionException("QUEUE config missing: " + def.getId());
         if (def.getProvider() == null)
-            throw new IntegrationExecutionException("Provider de fila não definido para: " + def.getId());
+            throw new IntegrationExecutionException("Queue provider not defined for: " + def.getId());
 
         try {
-            String message = templateResolver.resolve(q.getMensagemTemplate(), ctx);
+            String message = templateResolver.resolve(q.getMessageTemplate(), ctx);
             return switch (def.getProvider()) {
                 case RABBITMQ -> rabbitMqPublisher.publish(def.getId(), q, message);
                 case KAFKA -> kafkaPublisher.publish(def.getId(), q, message);
                 case SQS -> sqsPublisher.publish(q, message);
             };
         } catch (Exception e) {
-            log.error("Erro QUEUE em '{}' ({}): {}", def.getId(), def.getProvider(), e.getMessage());
-            throw new IntegrationExecutionException("Falha na integração QUEUE: " + def.getId(), e);
+            log.error("Error QUEUE for '{}' ({}): {}", def.getId(), def.getProvider(), e.getMessage());
+            throw new IntegrationExecutionException("QUEUE integration failed: " + def.getId(), e);
         }
     }
 }

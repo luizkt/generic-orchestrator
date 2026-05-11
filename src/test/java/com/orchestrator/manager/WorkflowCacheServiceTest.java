@@ -33,7 +33,7 @@ class WorkflowCacheServiceTest {
     void setUp() {
         flow = new FlowDefinition();
         flow.setFlowId("x");
-        flow.setVersao("1.0");
+        flow.setVersion("1.0");
     }
 
     @Test @DisplayName("load: cache miss chama Manager e parser")
