@@ -1,36 +1,142 @@
-version: '3.8'
-# Compose local somente para o orquestrador rodar isoladamente (./gradlew bootRun).
-# Em ambientes integrados use ../docker-compose-service-portal.yml — sobe a stack
-# completa (Manager, Redis, BFF, frontend, Authentik, etc.).
+# =============================================================================
+# generic-orchestrator — Compose ISOLADO
+# =============================================================================
 #
-# MongoDB foi removido — workflows não fazem mais integração de banco genérica.
-# Persistência de dados de domínio acontece nos serviços downstream.
+# Sobe APENAS a infraestrutura + dependências de runtime que o orquestrador
+# precisa para rodar localmente via `./gradlew bootRun`.
+#
+# Inclui o `manager` como container (orquestrador consulta workflows nele
+# durante o warm-up e em cache miss). MongoDB é montado pelo init script.
+#
+# Para a stack completa (BFF + frontend + Authentik), use o
+# ../docker-compose-service-portal.yml na raiz do repositório.
+#
+# Uso:
+#   docker compose up -d
+#   ./gradlew bootRun                # Spring conecta em localhost:* via portas mapeadas
+#   docker compose down
+# =============================================================================
+
 services:
+
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    container_name: orchestrator-redis
     command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
 
   rabbitmq:
-    image: rabbitmq:3-management
-    ports: ["5672:5672", "15672:15672"]
+    image: rabbitmq:3-management-alpine
+    container_name: orchestrator-rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      start_period: 20s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
 
   kafka:
     image: bitnami/kafka:3.7
-    ports: ["9092:9092"]
+    container_name: orchestrator-kafka
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list 2>&1"]
+      start_period: 30s
+      interval: 15s
+      timeout: 10s
+      retries: 5
     environment:
-      KAFKA_CFG_NODE_ID: "1"
-      KAFKA_CFG_PROCESS_ROLES: controller,broker
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_CFG_NODE_ID:                         "1"
+      KAFKA_CFG_PROCESS_ROLES:                   controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS:        1@kafka:9093
+      KAFKA_CFG_LISTENERS:                       PLAINTEXT://:9092,CONTROLLER://:9093
+      # Advertised listener = localhost para permitir que o app rodando no host
+      # acesse o broker via porta mapeada (porta 9092 do container).
+      KAFKA_CFG_ADVERTISED_LISTENERS:            PLAINTEXT://localhost:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP:  CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES:       CONTROLLER
+      ALLOW_PLAINTEXT_LISTENER:                  "yes"
+    ports:
+      - "9092:9092"
+
+  mongodb:
+    image: mongo:7
+    container_name: orchestrator-mongodb
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping').ok", "--quiet"]
+      start_period: 15s
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGODB_DATABASE:-generic-orchestrator}
+    volumes:
+      - ./mongodb-workflows:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "27017:27017"
 
   localstack:
     image: localstack/localstack:3
-    ports: ["4566:4566"]
+    container_name: orchestrator-localstack
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health | grep -q '\"sqs\": \"\\(available\\|running\\)\"' || exit 1"]
+      start_period: 20s
+      interval: 15s
+      timeout: 5s
+      retries: 5
     environment:
-      - SERVICES=sqs
-      - DEFAULT_REGION=us-east-1
+      SERVICES:       sqs
+      DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+      DEBUG:          "0"
+    ports:
+      - "${LOCALSTACK_PORT:-4566}:4566"
+
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    container_name: orchestrator-wiremock
+    command: ["--port", "8080", "--global-response-templating", "--verbose"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/__admin/health || exit 1"]
+      start_period: 10s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ../wiremock/mappings:/home/wiremock/mappings:ro
+      - ../wiremock/__files:/home/wiremock/__files:ro
+    ports:
+      - "${WIREMOCK_PORT:-18080}:8080"
+
+  # Manager containerizado — o orchestrator (rodando no host) consulta esta
+  # instância via http://localhost:8082 durante warm-up e cache miss.
+  manager:
+    build:
+      context: ../service-portal-manager
+      dockerfile: Dockerfile
+    container_name: orchestrator-manager
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/actuator/health || exit 1"]
+      start_period: 60s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MONGODB_URI:            mongodb://mongodb:27017/${MONGODB_DATABASE:-generic-orchestrator}
+      MONGODB_DATABASE:       ${MONGODB_DATABASE:-generic-orchestrator}
+      JWT_SECRET:             ${MANAGER_JWT_SECRET:-${ORCHESTRATOR_JWT_SECRET:-CHANGE_ME_PLEASE_THIS_IS_A_DEV_ONLY_SECRET_AT_LEAST_64_CHARS_LONG_FOR_HS512}}
+      MANAGER_ADMIN_USERNAME: ${MANAGER_ADMIN_USERNAME:-admin}
+      MANAGER_ADMIN_PASSWORD: ${MANAGER_ADMIN_PASSWORD:-admin}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "8082:8082"
