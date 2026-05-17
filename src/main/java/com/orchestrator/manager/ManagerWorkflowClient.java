@@ -41,7 +41,7 @@ public class ManagerWorkflowClient {
     public List<WorkflowSummary> listActive() {
         try {
             List<WorkflowSummary> result = managerWebClient.get()
-                    .uri("/manager/workflows/active")
+                    .uri("/manager/flows?status=active")
                     .header(HttpHeaders.AUTHORIZATION, authHeader())
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<List<WorkflowSummary>>() {})
@@ -58,7 +58,7 @@ public class ManagerWorkflowClient {
     public String fetchYaml(String flowId, String versao) {
         try {
             String yaml = managerWebClient.get()
-                    .uri("/manager/workflows/{flowId}/{versao}/yaml", flowId, versao)
+                    .uri("/manager/flows/{flowId}/versions/{versao}/yaml", flowId, versao)
                     .header(HttpHeaders.AUTHORIZATION, authHeader())
                     .retrieve()
                     .bodyToMono(String.class)

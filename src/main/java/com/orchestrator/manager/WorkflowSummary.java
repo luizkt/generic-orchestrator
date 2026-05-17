@@ -6,7 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * DTO recebido em `GET /manager/workflows/active` (Manager) — apenas os campos
+ * DTO recebido em `GET /manager/flows?status=active` (Manager) — apenas os campos
  * que o orquestrador usa para warm-up do cache. Outros campos são ignorados.
  */
 @Data

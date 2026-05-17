@@ -64,7 +64,7 @@ class ManagerWorkflowClientTest {
         assertThat(ativos.get(0).getFlowId()).isEqualTo("a");
 
         RecordedRequest req = mockWebServer.takeRequest();
-        assertThat(req.getPath()).isEqualTo("/manager/workflows/active");
+        assertThat(req.getPath()).isEqualTo("/manager/flows?status=active");
         assertThat(req.getHeader("Authorization")).isEqualTo("Bearer test-token");
     }
 
@@ -92,7 +92,7 @@ class ManagerWorkflowClientTest {
         assertThat(result).isEqualTo(yaml);
 
         RecordedRequest req = mockWebServer.takeRequest();
-        assertThat(req.getPath()).isEqualTo("/manager/workflows/flow-x/1.0.0/yaml");
+        assertThat(req.getPath()).isEqualTo("/manager/flows/flow-x/versions/1.0.0/yaml");
         assertThat(req.getHeader("Authorization")).isEqualTo("Bearer test-token");
     }
 

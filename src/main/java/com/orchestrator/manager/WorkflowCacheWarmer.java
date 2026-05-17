@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Warm-up do cache de workflows na inicialização: chama
- * `GET /manager/workflows/active` e popula o Redis para cada fluxo ativo.
+ * `GET /manager/flows?status=active` e popula o Redis para cada fluxo ativo.
  *
  * Quando um fluxo falhar individualmente (ex.: YAML antigo sem `yamlContent`
  * vindo de docs criados pelo orquestrador antes da migração) o erro é logado
