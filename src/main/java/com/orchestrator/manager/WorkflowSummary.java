@@ -15,6 +15,6 @@ import lombok.NoArgsConstructor;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class WorkflowSummary {
     private String flowId;
-    private String versao;
-    private boolean ativo;
+    private String version;
+    private boolean active;
 }

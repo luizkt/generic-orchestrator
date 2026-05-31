@@ -1,10 +1,9 @@
 package com.orchestrator.config;
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.orchestrator.domain.model.FlowDefinition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -12,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 
 import java.time.Duration;
@@ -22,13 +21,11 @@ import java.time.Duration;
  *
  * TTL padrão de 1 hora (configurável via `orchestrator.cache.workflows.ttl-seconds`).
  *
- * Por que parsed FlowDefinition em vez do YAML cru:
- *   - Economia de CPU em execuções concorrentes (parse YAML acontece 1x por entrada).
- *   - Spring Cache + Jackson serializa/deserializa transparentemente para o Redis.
- *
- * Invalidação: somente por TTL. Workflows atualizados via Manager ficarão
- * "stale" no cache do orquestrador por até 1 hora — aceitável dado o uso
- * (workflows mudam raramente vs. execuções, que são muito frequentes).
+ * Usa Jackson2JsonRedisSerializer<FlowDefinition> com tipo concreto fixo —
+ * sem necessidade de @class no JSON. GenericJackson2JsonRedisSerializer com
+ * activateDefaultTyping(NON_FINAL) + BasicPolymorphicTypeValidator não embute
+ * @class no JSON em Jackson 2.12+ quando o tipo raiz é conhecido, causando
+ * ClassCastException ao desserializar (LinkedHashMap → FlowDefinition).
  */
 @Configuration
 @EnableCaching
@@ -40,27 +37,13 @@ public class RedisCacheConfig {
     private long ttlSeconds;
 
     @Bean
-    public ObjectMapper cacheObjectMapper() {
+    public RedisCacheManager workflowsCacheManager(RedisConnectionFactory connectionFactory) {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
-        mapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
-        // activateDefaultTyping para preservar tipos polimórficos (enums, sub-objetos)
-        mapper.activateDefaultTyping(
-                BasicPolymorphicTypeValidator.builder()
-                        .allowIfSubType("com.orchestrator.")
-                        .allowIfSubType("java.util.")
-                        .allowIfSubType("java.time.")
-                        .allowIfSubType("java.lang.")
-                        .build(),
-                ObjectMapper.DefaultTyping.NON_FINAL);
-        return mapper;
-    }
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-    @Bean
-    public RedisCacheManager workflowsCacheManager(
-            RedisConnectionFactory connectionFactory, ObjectMapper cacheObjectMapper) {
-        GenericJackson2JsonRedisSerializer serializer =
-                new GenericJackson2JsonRedisSerializer(cacheObjectMapper);
+        Jackson2JsonRedisSerializer<FlowDefinition> serializer =
+                new Jackson2JsonRedisSerializer<>(mapper, FlowDefinition.class);
 
         RedisCacheConfiguration cfg = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofSeconds(ttlSeconds))

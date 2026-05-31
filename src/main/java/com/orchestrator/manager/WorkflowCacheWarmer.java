@@ -44,11 +44,11 @@ public class WorkflowCacheWarmer {
             int ok = 0, falha = 0;
             for (WorkflowSummary w : ativos) {
                 try {
-                    cacheService.load(w.getFlowId(), w.getVersao());
+                    cacheService.load(w.getFlowId(), w.getVersion());
                     ok++;
                 } catch (Exception e) {
                     log.warn("Falha ao carregar fluxo {}/{} no warm-up: {}",
-                            w.getFlowId(), w.getVersao(), e.getMessage());
+                            w.getFlowId(), w.getVersion(), e.getMessage());
                     falha++;
                 }
             }
