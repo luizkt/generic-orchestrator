@@ -25,7 +25,7 @@ class SecurityIT extends AbstractIntegrationTest {
     void blocksWithoutToken() throws Exception {
         // The execution endpoint is the only protected one left after the refactor —
         // CRUD of flows lives in service-portal-manager.
-        mockMvc.perform(post("/api/flows/any-flow/versions/v1/executions")
+        mockMvc.perform(post("/api/v1/flows/any-flow/versions/v1/executions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isUnauthorized());
@@ -74,7 +74,7 @@ class SecurityIT extends AbstractIntegrationTest {
                 loginResult.getResponse().getContentAsString(), LoginResponse.class);
 
         // Flow does not exist; auth passes so execution result returns 200 with FAILED status — never 401.
-        mockMvc.perform(post("/api/flows/missing-flow/versions/v1/executions")
+        mockMvc.perform(post("/api/v1/flows/missing-flow/versions/v1/executions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}")
                         .header("Authorization", "Bearer " + resp.getToken()))

@@ -3,31 +3,37 @@ package com.orchestrator.controller;
 import com.orchestrator.domain.execution.FlowExecutionResult;
 import com.orchestrator.dto.OrchestrationResponse;
 import com.orchestrator.service.OrchestrationService;
+import com.orchestrator.service.OrchestrationV2Service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-/**
- * Executes a workflow.
- *
- * REST-shape: POST creates a new resource in the sub-collection {@code executions}
- * of {@code /api/flows/{flowId}/versions/{version}}. After the REST refactor the
- * {@code orchestrate} verb was removed from the path.
- */
 @RestController
-@RequestMapping("/api/flows")
 @RequiredArgsConstructor
 public class OrchestrationController {
 
     private final OrchestrationService orchestrationService;
+    private final OrchestrationV2Service orchestrationV2Service;
 
-    @PostMapping("/{flowId}/versions/{version}/executions")
-    public ResponseEntity<OrchestrationResponse> execute(@PathVariable String flowId,
-                                                         @PathVariable String version,
-                                                         @RequestBody Map<String, Object> payload) {
-        FlowExecutionResult r = orchestrationService.execute(version, flowId, payload);
+    /** v1 — execução sequencial (comportamento original). */
+    @PostMapping("/api/v1/flows/{flowId}/versions/{version}/executions")
+    public ResponseEntity<OrchestrationResponse> executeV1(@PathVariable String flowId,
+                                                           @PathVariable String version,
+                                                           @RequestBody Map<String, Object> payload) {
+        return toResponse(orchestrationService.execute(version, flowId, payload));
+    }
+
+    /** v2 — execução paralela de integrações com mesmo {@code order} via Java Virtual Threads. */
+    @PostMapping("/api/v2/flows/{flowId}/versions/{version}/executions")
+    public ResponseEntity<OrchestrationResponse> executeV2(@PathVariable String flowId,
+                                                           @PathVariable String version,
+                                                           @RequestBody Map<String, Object> payload) {
+        return toResponse(orchestrationV2Service.execute(version, flowId, payload));
+    }
+
+    private ResponseEntity<OrchestrationResponse> toResponse(FlowExecutionResult r) {
         return ResponseEntity.ok(OrchestrationResponse.builder()
                 .executionId(r.getExecutionId())
                 .flowId(r.getFlowId())
