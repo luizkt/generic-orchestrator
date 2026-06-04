@@ -52,7 +52,8 @@ flow:
           targetField: "orderId"
           sourceField: "id"
 
-    - id: "notify-rabbit"
+    # O id do passo QUEUE deve casar com o id do broker em orch-integrations.rabbitmqs
+    - id: "rabbitmq-notifier"
       order: 3
       type: QUEUE
       provider: RABBITMQ
@@ -64,7 +65,8 @@ flow:
           {"event":"ORDER_CREATED","orderId":"{{integrations.save-order.orderId}}"}
         persistent: true
 
-    - id: "notify-kafka"
+    # O id do passo QUEUE deve casar com o id do broker em orch-integrations.kafkas
+    - id: "kafka-user-tracking"
       order: 4
       type: QUEUE
       provider: KAFKA
