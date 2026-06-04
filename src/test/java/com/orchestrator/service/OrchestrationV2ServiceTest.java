@@ -149,7 +149,7 @@ class OrchestrationV2ServiceTest {
         FlowExecutionResult r = service.execute("1.0.0", "test-flow", Map.of());
 
         assertThat(r.getStatus()).isEqualTo(ExecutionStatus.FAILED);
-        assertThat(r.getErrorMessage()).contains("Required integration failed");
+        assertThat(r.getErrorMessage()).contains("Required integration failed: step-a");
     }
 
     @Test @DisplayName("FAILED quando flow não encontrado")
@@ -161,5 +161,78 @@ class OrchestrationV2ServiceTest {
 
         assertThat(r.getStatus()).isEqualTo(ExecutionStatus.FAILED);
         assertThat(r.getErrorMessage()).contains("Não encontrado");
+    }
+
+    @Test @DisplayName("Executa validações após integrações e retorna resultados separados")
+    void validationsRunAfterIntegrations() {
+        IntegrationDefinition integration = httpStep("step-1", 1);
+        IntegrationDefinition validation = httpStep("val-1", 1);
+        flow.setIntegrations(List.of(integration));
+        flow.setValidations(List.of(validation));
+
+        when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
+        when(executorFactory.get(IntegrationType.HTTP)).thenReturn(httpExecutor);
+        when(httpExecutor.execute(any(), any())).thenReturn(Map.of("ok", true));
+
+        FlowExecutionResult r = service.execute("1.0.0", "test-flow", Map.of());
+
+        assertThat(r.getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
+        assertThat(r.getResult()).containsKey("step-1");
+        assertThat(r.getValidations()).containsKey("val-1");
+        verify(httpExecutor, times(2)).execute(any(), any());
+    }
+
+    @Test @DisplayName("PARTIAL_SUCCESS quando validação opcional falha")
+    void optionalValidationFailureYieldsPartialSuccess() {
+        IntegrationDefinition integration = httpStep("step-1", 1);
+        IntegrationDefinition validation = httpStep("val-opt", 1);
+        validation.setContinueOnError(true);
+        flow.setIntegrations(List.of(integration));
+        flow.setValidations(List.of(validation));
+
+        when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
+        when(executorFactory.get(IntegrationType.HTTP)).thenReturn(httpExecutor);
+        when(httpExecutor.execute(eq(integration), any())).thenReturn(Map.of("ok", true));
+        when(httpExecutor.execute(eq(validation), any())).thenThrow(new RuntimeException("credit denied"));
+
+        FlowExecutionResult r = service.execute("1.0.0", "test-flow", Map.of());
+
+        assertThat(r.getStatus()).isEqualTo(ExecutionStatus.PARTIAL_SUCCESS);
+        assertThat(r.getValidations().get("val-opt")).isEqualTo(Map.of("error", "credit denied"));
+    }
+
+    @Test @DisplayName("FAILED quando validação obrigatória falha")
+    void requiredValidationFailureYieldsFailed() {
+        IntegrationDefinition integration = httpStep("step-1", 1);
+        IntegrationDefinition validation = httpStep("val-required", 1);
+        validation.setContinueOnError(false);
+        flow.setIntegrations(List.of(integration));
+        flow.setValidations(List.of(validation));
+
+        when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
+        when(executorFactory.get(IntegrationType.HTTP)).thenReturn(httpExecutor);
+        when(httpExecutor.execute(eq(integration), any())).thenReturn(Map.of("ok", true));
+        when(httpExecutor.execute(eq(validation), any())).thenThrow(new RuntimeException("failed"));
+
+        FlowExecutionResult r = service.execute("1.0.0", "test-flow", Map.of());
+
+        assertThat(r.getStatus()).isEqualTo(ExecutionStatus.FAILED);
+        assertThat(r.getErrorMessage()).contains("Required validation failed: val-required");
+    }
+
+    @Test @DisplayName("Flow sem validações executa normalmente (backward compat)")
+    void flowWithNoValidationsStillSucceeds() {
+        flow.setIntegrations(List.of(httpStep("step-1", 1)));
+        flow.setValidations(null);
+
+        when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
+        when(executorFactory.get(IntegrationType.HTTP)).thenReturn(httpExecutor);
+        when(httpExecutor.execute(any(), any())).thenReturn(Map.of("ok", true));
+
+        FlowExecutionResult r = service.execute("1.0.0", "test-flow", Map.of());
+
+        assertThat(r.getStatus()).isEqualTo(ExecutionStatus.SUCCESS);
+        assertThat(r.getResult()).containsKey("step-1");
+        assertThat(r.getValidations()).isEmpty();
     }
 }

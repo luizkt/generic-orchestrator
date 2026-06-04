@@ -39,6 +39,7 @@ public class OrchestrationController {
                 .flowId(r.getFlowId())
                 .status(r.getStatus())
                 .result(r.getResult())
+                .validations(r.getValidations())
                 .errorMessage(r.getErrorMessage())
                 .startedAt(r.getStartedAt())
                 .finishedAt(r.getFinishedAt())

@@ -83,3 +83,17 @@ flow:
         queueUrl: "https://sqs.us-east-1.amazonaws.com/123/orders"
         messageTemplate: |
           {"orderId":"{{integrations.save-order.orderId}}"}
+
+  # Executed after ALL integrations complete.
+  # Uses the same structure as integrations (HTTP calls to external validation services).
+  validations:
+    - id: "check-credit-limit"
+      order: 1
+      type: HTTP
+      continueOnError: false
+      http:
+        url: "http://api.exemplo.com/clients/{{contract.clientId}}/credit"
+        method: GET
+        headers:
+          Content-Type: "application/json"
+        timeout: 5000

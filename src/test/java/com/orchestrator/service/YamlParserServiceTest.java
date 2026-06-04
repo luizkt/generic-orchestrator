@@ -116,6 +116,37 @@ class YamlParserServiceTest {
     }
 
     @Test
+    @DisplayName("Parses YAML with optional validations section")
+    void parsesWithValidations() {
+        String yaml = """
+            flow:
+              id: "flow-with-validations"
+              contract:
+                fields: []
+              integrations:
+                - id: "step-1"
+                  order: 1
+                  type: HTTP
+                  http:
+                    url: "http://api.test/data"
+                    method: GET
+              validations:
+                - id: "check-credit"
+                  order: 1
+                  type: HTTP
+                  http:
+                    url: "http://api.test/credit"
+                    method: GET
+            """;
+        FlowDefinition d = service.parse(yaml);
+
+        assertThat(d.getIntegrations()).hasSize(1);
+        assertThat(d.getValidations()).hasSize(1);
+        assertThat(d.getValidations().get(0).getId()).isEqualTo("check-credit");
+        assertThat(d.getValidations().get(0).getType()).isEqualTo(IntegrationType.HTTP);
+    }
+
+    @Test
     @DisplayName("docs/example-flow.yml: parse and structure match the WireMock setup")
     void exampleFlowYamlIsConsistentWithWiremock() throws Exception {
         // Garante que: (1) o YAML é parseável; (2) a URL HTTP aponta para api.exemplo.com

@@ -10,6 +10,7 @@ public class OrchestrationResponse {
     private String flowId;
     private ExecutionStatus status;
     private Map<String, Object> result;
+    private Map<String, Object> validations;
     private String errorMessage;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;

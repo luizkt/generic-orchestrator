@@ -59,6 +59,26 @@ public class OrchestrationService {
                 }
             }
 
+            if (def.getValidations() != null && !def.getValidations().isEmpty()) {
+                for (IntegrationDefinition v : def.getValidations().stream()
+                        .sorted(Comparator.comparingInt(IntegrationDefinition::getOrder)).toList()) {
+                    try {
+                        Object result = executorFactory.get(v.getType()).execute(v, ctx);
+                        ctx.putValidationResult(v.getId(), applyMapping(v, result));
+                        log.info("Validation '{}' OK", v.getId());
+                    } catch (Exception e) {
+                        if (v.isContinueOnError()) {
+                            log.warn("Validation '{}' failed (continuing): {}", v.getId(), e.getMessage());
+                            ctx.putValidationResult(v.getId(), Map.of("error", e.getMessage()));
+                            hadError = true;
+                        } else {
+                            throw new IntegrationExecutionException(
+                                    "Required validation failed: " + v.getId(), e);
+                        }
+                    }
+                }
+            }
+
             ctx.setStatus(hadError ? ExecutionStatus.PARTIAL_SUCCESS : ExecutionStatus.SUCCESS);
             ctx.setFinishedAt(LocalDateTime.now());
 
@@ -78,6 +98,7 @@ public class OrchestrationService {
                 .flowId(ctx.getFlowId())
                 .status(ctx.getStatus())
                 .result(ctx.getIntegrations())
+                .validations(ctx.getValidations())
                 .errorMessage(error)
                 .startedAt(ctx.getStartedAt())
                 .finishedAt(ctx.getFinishedAt())

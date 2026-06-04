@@ -24,6 +24,7 @@ public class FlowDefinition {
     private boolean active;
     private FlowContract contract;
     private List<IntegrationDefinition> integrations;
+    private List<IntegrationDefinition> validations;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

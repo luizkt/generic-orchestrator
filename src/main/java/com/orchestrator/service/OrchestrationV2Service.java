@@ -22,6 +22,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 /**
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
  * Integrações com o mesmo valor de {@code order} são disparadas simultaneamente
  * via Java Virtual Threads (Project Loom). Grupos distintos são executados em
  * sequência — o grupo N+1 só começa após todos os itens do grupo N terminarem.
+ * Após todas as integrações, a fase de validações é executada com o mesmo padrão.
  */
 @Slf4j
 @Service
@@ -54,18 +56,10 @@ public class OrchestrationV2Service {
             FlowDefinition def = workflowCacheService.load(flowId, version);
             contractValidationService.validate(def.getContract(), ctx.getContract());
 
-            Map<Integer, List<IntegrationDefinition>> byOrder = def.getIntegrations().stream()
-                    .collect(Collectors.groupingBy(IntegrationDefinition::getOrder, TreeMap::new, Collectors.toList()));
-
             AtomicBoolean hadError = new AtomicBoolean(false);
 
-            for (List<IntegrationDefinition> group : byOrder.values()) {
-                if (group.size() == 1) {
-                    executeSingle(group.get(0), ctx, hadError);
-                } else {
-                    executeGroupParallel(group, ctx, hadError);
-                }
-            }
+            executePhase(def.getIntegrations(), ctx, hadError, ctx::putIntegrationResult, "integration");
+            executePhase(def.getValidations(), ctx, hadError, ctx::putValidationResult, "validation");
 
             ctx.setStatus(hadError.get() ? ExecutionStatus.PARTIAL_SUCCESS : ExecutionStatus.SUCCESS);
             ctx.setFinishedAt(LocalDateTime.now());
@@ -80,14 +74,29 @@ public class OrchestrationV2Service {
         }
     }
 
-    private void executeGroupParallel(List<IntegrationDefinition> group,
-                                      FlowExecutionContext ctx,
-                                      AtomicBoolean hadError) {
+    private void executePhase(List<IntegrationDefinition> steps, FlowExecutionContext ctx,
+                               AtomicBoolean hadError, BiConsumer<String, Object> resultStore,
+                               String stepType) {
+        if (steps == null || steps.isEmpty()) return;
+        Map<Integer, List<IntegrationDefinition>> byOrder = steps.stream()
+                .collect(Collectors.groupingBy(IntegrationDefinition::getOrder, TreeMap::new, Collectors.toList()));
+        for (List<IntegrationDefinition> group : byOrder.values()) {
+            if (group.size() == 1) {
+                runStep(group.get(0), ctx, hadError, resultStore, stepType);
+            } else {
+                executeGroupParallel(group, ctx, hadError, resultStore, stepType);
+            }
+        }
+    }
+
+    private void executeGroupParallel(List<IntegrationDefinition> group, FlowExecutionContext ctx,
+                                      AtomicBoolean hadError, BiConsumer<String, Object> resultStore,
+                                      String stepType) {
         List<IntegrationExecutionException> requiredFailures = new ArrayList<>();
 
         try (ExecutorService vte = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<?>> futures = group.stream()
-                    .<Future<?>>map(i -> vte.submit(() -> runIntegration(i, ctx, hadError)))
+                    .<Future<?>>map(i -> vte.submit(() -> runStep(i, ctx, hadError, resultStore, stepType)))
                     .toList();
 
             for (Future<?> f : futures) {
@@ -107,26 +116,20 @@ public class OrchestrationV2Service {
         }
     }
 
-    private void executeSingle(IntegrationDefinition i, FlowExecutionContext ctx, AtomicBoolean hadError) {
-        try {
-            runIntegration(i, ctx, hadError);
-        } catch (IntegrationExecutionException e) {
-            throw e;
-        }
-    }
-
-    private void runIntegration(IntegrationDefinition i, FlowExecutionContext ctx, AtomicBoolean hadError) {
+    private void runStep(IntegrationDefinition i, FlowExecutionContext ctx, AtomicBoolean hadError,
+                         BiConsumer<String, Object> resultStore, String stepType) {
         try {
             Object result = executorFactory.get(i.getType()).execute(i, ctx);
-            ctx.putIntegrationResult(i.getId(), applyMapping(i, result));
-            log.info("[v2] Integration '{}' OK", i.getId());
+            resultStore.accept(i.getId(), applyMapping(i, result));
+            log.info("[v2] {} '{}' OK", stepType, i.getId());
         } catch (Exception e) {
             if (i.isContinueOnError()) {
-                log.warn("[v2] Integration '{}' failed (continuing): {}", i.getId(), e.getMessage());
-                ctx.putIntegrationResult(i.getId(), Map.of("error", e.getMessage()));
+                log.warn("[v2] {} '{}' failed (continuing): {}", stepType, i.getId(), e.getMessage());
+                resultStore.accept(i.getId(), Map.of("error", e.getMessage()));
                 hadError.set(true);
             } else {
-                throw new IntegrationExecutionException("Required integration failed: " + i.getId(), e);
+                throw new IntegrationExecutionException(
+                        "Required " + stepType + " failed: " + i.getId(), e);
             }
         }
     }
@@ -137,6 +140,7 @@ public class OrchestrationV2Service {
                 .flowId(ctx.getFlowId())
                 .status(ctx.getStatus())
                 .result(ctx.getIntegrations())
+                .validations(ctx.getValidations())
                 .errorMessage(error)
                 .startedAt(ctx.getStartedAt())
                 .finishedAt(ctx.getFinishedAt())
