@@ -101,7 +101,9 @@ val coverageIncludes = listOf(
     "com/orchestrator/manager/**",
     "com/orchestrator/config/RedisCacheConfig.class",
     "com/orchestrator/config/ManagerWebClientConfig.class",
-    "com/orchestrator/config/properties/ManagerProperties.class"
+    "com/orchestrator/config/properties/ManagerProperties.class",
+    // Endpoint admin de invalidação de cache (cross-service)
+    "com/orchestrator/controller/CacheAdminController.class"
 )
 
 tasks.named<JacocoReport>("jacocoTestReport") {
