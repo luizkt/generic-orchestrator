@@ -1,3 +1,26 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Luiz
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 package com.orchestrator.integration.http;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -15,17 +38,16 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryRegistry;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
 
 @Slf4j
 @Component
@@ -40,20 +62,29 @@ public class HttpIntegrationExecutor implements IntegrationExecutor {
     private final OrchIntegrationsProperties properties;
 
     @Override
-    public IntegrationType getType() { return IntegrationType.HTTP; }
+    public IntegrationType getType() {
+        return IntegrationType.HTTP;
+    }
 
     @Override
     @SuppressWarnings("unchecked")
     public Object execute(IntegrationDefinition def, FlowExecutionContext ctx) {
         HttpIntegrationConfig http = def.getHttp();
-        if (http == null) throw new IntegrationExecutionException("HTTP config missing: " + def.getId());
+        if (http == null)
+            throw new IntegrationExecutionException("HTTP config missing: " + def.getId());
 
         String url = templateResolver.resolve(http.getUrl(), ctx);
         String method = http.getMethod() != null ? http.getMethod().toUpperCase() : "GET";
-        String body = http.getBodyTemplate() != null ? templateResolver.resolve(http.getBodyTemplate(), ctx) : null;
-        long timeout = http.getTimeout() > 0 ? http.getTimeout()
-                : properties.getRetryConfiguration().getTimeout();
-        List<Integer> retryableStatuses = properties.getRetryConfiguration().getRetryableHttpCondition();
+        String body =
+                http.getBodyTemplate() != null
+                        ? templateResolver.resolve(http.getBodyTemplate(), ctx)
+                        : null;
+        long timeout =
+                http.getTimeout() > 0
+                        ? http.getTimeout()
+                        : properties.getRetryConfiguration().getTimeout();
+        List<Integer> retryableStatuses =
+                properties.getRetryConfiguration().getRetryableHttpCondition();
 
         log.info("[HTTP] {} {} (id={})", method, url, def.getId());
 
@@ -62,46 +93,77 @@ public class HttpIntegrationExecutor implements IntegrationExecutor {
 
         // Ordem: Retry(CircuitBreaker(httpCall)) — cada tentativa passa pelo CB,
         // que registra falhas e pode abrir o circuito para proteger o serviço downstream.
-        Supplier<String> httpCall = CircuitBreaker.decorateSupplier(cb,
-                () -> doHttpCall(http, url, method, body, timeout, retryableStatuses));
+        Supplier<String> httpCall =
+                CircuitBreaker.decorateSupplier(
+                        cb, () -> doHttpCall(http, url, method, body, timeout, retryableStatuses));
 
         Supplier<String> withRetry = Retry.decorateSupplier(retry, httpCall);
 
-        retry.getEventPublisher().onRetry(e ->
-                log.warn("[HTTP] Retry #{} para '{}' após: {}", e.getNumberOfRetryAttempts(),
-                        def.getId(), e.getLastThrowable().getMessage()));
+        retry.getEventPublisher()
+                .onRetry(
+                        e ->
+                                log.warn(
+                                        "[HTTP] Retry #{} para '{}' após: {}",
+                                        e.getNumberOfRetryAttempts(),
+                                        def.getId(),
+                                        e.getLastThrowable().getMessage()));
 
         cb.getEventPublisher()
-                .onStateTransition(e -> log.warn("[CB] '{}' transitou: {} → {}",
-                        def.getId(), e.getStateTransition().getFromState(), e.getStateTransition().getToState()))
-                .onCallNotPermitted(e -> log.warn("[CB] Chamada bloqueada pelo circuit breaker: {}", def.getId()));
+                .onStateTransition(
+                        e ->
+                                log.warn(
+                                        "[CB] '{}' transitou: {} → {}",
+                                        def.getId(),
+                                        e.getStateTransition().getFromState(),
+                                        e.getStateTransition().getToState()))
+                .onCallNotPermitted(
+                        e ->
+                                log.warn(
+                                        "[CB] Chamada bloqueada pelo circuit breaker: {}",
+                                        def.getId()));
 
         try {
             String resp = withRetry.get();
             if (resp == null || resp.isBlank()) return Map.of();
-            try { return objectMapper.readValue(resp, Map.class); }
-            catch (Exception e) { return Map.of("response", resp); }
+            try {
+                return objectMapper.readValue(resp, Map.class);
+            } catch (Exception e) {
+                return Map.of("response", resp);
+            }
         } catch (CallNotPermittedException e) {
             log.error("[HTTP] Circuit breaker open for '{}': {}", def.getId(), e.getMessage());
             throw new IntegrationExecutionException("Circuit breaker open for: " + def.getId(), e);
         } catch (Exception e) {
-            log.error("[HTTP] Error after retries exhausted for '{}': {}", def.getId(), e.getMessage());
+            log.error(
+                    "[HTTP] Error after retries exhausted for '{}': {}",
+                    def.getId(),
+                    e.getMessage());
             throw new IntegrationExecutionException("HTTP integration failed: " + def.getId(), e);
         }
     }
 
-    private String doHttpCall(HttpIntegrationConfig http, String url, String method,
-                               String body, long timeout, List<Integer> retryableStatuses) {
+    private String doHttpCall(
+            HttpIntegrationConfig http,
+            String url,
+            String method,
+            String body,
+            long timeout,
+            List<Integer> retryableStatuses) {
         WebClient.RequestBodySpec spec = webClient.method(HttpMethod.valueOf(method)).uri(url);
         if (http.getHeaders() != null) http.getHeaders().forEach(spec::header);
 
         try {
             if (body != null && !body.isBlank()) {
-                return spec.bodyValue(body).retrieve().bodyToMono(String.class)
-                        .timeout(Duration.ofMillis(timeout)).block();
+                return spec.bodyValue(body)
+                        .retrieve()
+                        .bodyToMono(String.class)
+                        .timeout(Duration.ofMillis(timeout))
+                        .block();
             }
-            return spec.retrieve().bodyToMono(String.class)
-                    .timeout(Duration.ofMillis(timeout)).block();
+            return spec.retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(Duration.ofMillis(timeout))
+                    .block();
         } catch (WebClientResponseException e) {
             int status = e.getStatusCode().value();
             if (retryableStatuses.contains(status)) {

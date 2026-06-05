@@ -1,4 +1,32 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Luiz
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 package com.orchestrator.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 
 import com.orchestrator.domain.execution.ExecutionStatus;
 import com.orchestrator.domain.execution.FlowExecutionResult;
@@ -6,6 +34,10 @@ import com.orchestrator.domain.model.*;
 import com.orchestrator.integration.IntegrationExecutor;
 import com.orchestrator.integration.IntegrationExecutorFactory;
 import com.orchestrator.manager.WorkflowCacheService;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,16 +45,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class OrchestrationV2ServiceTest {
@@ -55,7 +77,8 @@ class OrchestrationV2ServiceTest {
         return i;
     }
 
-    @Test @DisplayName("Fluxo com única integração retorna SUCCESS")
+    @Test
+    @DisplayName("Fluxo com única integração retorna SUCCESS")
     void singleIntegrationSuccess() {
         flow.setIntegrations(List.of(httpStep("step-1", 1)));
         when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
@@ -68,7 +91,8 @@ class OrchestrationV2ServiceTest {
         assertThat(r.getResult()).containsKey("step-1");
     }
 
-    @Test @DisplayName("Integrações com mesmo order executam em paralelo via virtual threads")
+    @Test
+    @DisplayName("Integrações com mesmo order executam em paralelo via virtual threads")
     void sameOrderRunsInParallel() throws Exception {
         IntegrationDefinition i1 = httpStep("step-a", 1);
         IntegrationDefinition i2 = httpStep("step-b", 1);
@@ -80,14 +104,16 @@ class OrchestrationV2ServiceTest {
 
         when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
         when(executorFactory.get(IntegrationType.HTTP)).thenReturn(httpExecutor);
-        when(httpExecutor.execute(any(), any())).thenAnswer(inv -> {
-            int c = current.incrementAndGet();
-            maxConcurrent.updateAndGet(m -> Math.max(m, c));
-            bothStarted.countDown();
-            bothStarted.await();
-            current.decrementAndGet();
-            return Map.of("ok", true);
-        });
+        when(httpExecutor.execute(any(), any()))
+                .thenAnswer(
+                        inv -> {
+                            int c = current.incrementAndGet();
+                            maxConcurrent.updateAndGet(m -> Math.max(m, c));
+                            bothStarted.countDown();
+                            bothStarted.await();
+                            current.decrementAndGet();
+                            return Map.of("ok", true);
+                        });
 
         FlowExecutionResult r = service.execute("1.0.0", "test-flow", Map.of());
 
@@ -96,7 +122,8 @@ class OrchestrationV2ServiceTest {
         assertThat(maxConcurrent.get()).isEqualTo(2);
     }
 
-    @Test @DisplayName("Grupos distintos executam sequencialmente")
+    @Test
+    @DisplayName("Grupos distintos executam sequencialmente")
     void differentOrderRunsSequentially() {
         IntegrationDefinition i1 = httpStep("step-1", 1);
         IntegrationDefinition i2 = httpStep("step-2", 2);
@@ -113,7 +140,8 @@ class OrchestrationV2ServiceTest {
         verify(httpExecutor, times(2)).execute(any(), any());
     }
 
-    @Test @DisplayName("PARTIAL_SUCCESS quando integração opcional falha no grupo paralelo")
+    @Test
+    @DisplayName("PARTIAL_SUCCESS quando integração opcional falha no grupo paralelo")
     void optionalFailureInParallelGroupYieldsPartialSuccess() {
         IntegrationDefinition i1 = httpStep("step-a", 1);
         IntegrationDefinition i2 = httpStep("step-b", 1);
@@ -133,7 +161,8 @@ class OrchestrationV2ServiceTest {
         assertThat(r.getResult().get("step-b")).isEqualTo(Map.of("error", "timeout"));
     }
 
-    @Test @DisplayName("FAILED quando integração obrigatória falha no grupo paralelo")
+    @Test
+    @DisplayName("FAILED quando integração obrigatória falha no grupo paralelo")
     void requiredFailureInParallelGroupYieldsFailed() {
         IntegrationDefinition i1 = httpStep("step-a", 1);
         IntegrationDefinition i2 = httpStep("step-b", 1);
@@ -152,7 +181,8 @@ class OrchestrationV2ServiceTest {
         assertThat(r.getErrorMessage()).contains("Required integration failed: step-a");
     }
 
-    @Test @DisplayName("FAILED quando flow não encontrado")
+    @Test
+    @DisplayName("FAILED quando flow não encontrado")
     void flowNotFound() {
         when(workflowCacheService.load("test-flow", "9.9.9"))
                 .thenThrow(new com.orchestrator.exception.FlowNotFoundException("Não encontrado"));
@@ -163,7 +193,8 @@ class OrchestrationV2ServiceTest {
         assertThat(r.getErrorMessage()).contains("Não encontrado");
     }
 
-    @Test @DisplayName("Executa validações após integrações e retorna resultados separados")
+    @Test
+    @DisplayName("Executa validações após integrações e retorna resultados separados")
     void validationsRunAfterIntegrations() {
         IntegrationDefinition integration = httpStep("step-1", 1);
         IntegrationDefinition validation = httpStep("val-1", 1);
@@ -182,7 +213,8 @@ class OrchestrationV2ServiceTest {
         verify(httpExecutor, times(2)).execute(any(), any());
     }
 
-    @Test @DisplayName("PARTIAL_SUCCESS quando validação opcional falha")
+    @Test
+    @DisplayName("PARTIAL_SUCCESS quando validação opcional falha")
     void optionalValidationFailureYieldsPartialSuccess() {
         IntegrationDefinition integration = httpStep("step-1", 1);
         IntegrationDefinition validation = httpStep("val-opt", 1);
@@ -193,7 +225,8 @@ class OrchestrationV2ServiceTest {
         when(workflowCacheService.load("test-flow", "1.0.0")).thenReturn(flow);
         when(executorFactory.get(IntegrationType.HTTP)).thenReturn(httpExecutor);
         when(httpExecutor.execute(eq(integration), any())).thenReturn(Map.of("ok", true));
-        when(httpExecutor.execute(eq(validation), any())).thenThrow(new RuntimeException("credit denied"));
+        when(httpExecutor.execute(eq(validation), any()))
+                .thenThrow(new RuntimeException("credit denied"));
 
         FlowExecutionResult r = service.execute("1.0.0", "test-flow", Map.of());
 
@@ -201,7 +234,8 @@ class OrchestrationV2ServiceTest {
         assertThat(r.getValidations().get("val-opt")).isEqualTo(Map.of("error", "credit denied"));
     }
 
-    @Test @DisplayName("FAILED quando validação obrigatória falha")
+    @Test
+    @DisplayName("FAILED quando validação obrigatória falha")
     void requiredValidationFailureYieldsFailed() {
         IntegrationDefinition integration = httpStep("step-1", 1);
         IntegrationDefinition validation = httpStep("val-required", 1);
@@ -220,7 +254,8 @@ class OrchestrationV2ServiceTest {
         assertThat(r.getErrorMessage()).contains("Required validation failed: val-required");
     }
 
-    @Test @DisplayName("Flow sem validações executa normalmente (backward compat)")
+    @Test
+    @DisplayName("Flow sem validações executa normalmente (backward compat)")
     void flowWithNoValidationsStillSucceeds() {
         flow.setIntegrations(List.of(httpStep("step-1", 1)));
         flow.setValidations(null);

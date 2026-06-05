@@ -1,7 +1,36 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Luiz
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 package com.orchestrator.manager;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.orchestrator.config.properties.ManagerProperties;
 import com.orchestrator.exception.FlowNotFoundException;
+import java.io.IOException;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -11,14 +40,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-
-import java.io.IOException;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class ManagerWorkflowClientTest {
 
@@ -32,9 +53,8 @@ class ManagerWorkflowClientTest {
         mockWebServer = new MockWebServer();
         mockWebServer.start();
 
-        WebClient webClient = WebClient.builder()
-                .baseUrl(mockWebServer.url("/").toString())
-                .build();
+        WebClient webClient =
+                WebClient.builder().baseUrl(mockWebServer.url("/").toString()).build();
 
         props = new ManagerProperties();
         props.setBaseUrl(mockWebServer.url("/").toString());
@@ -49,15 +69,20 @@ class ManagerWorkflowClientTest {
     }
 
     @AfterEach
-    void tearDown() throws IOException { mockWebServer.shutdown(); }
+    void tearDown() throws IOException {
+        mockWebServer.shutdown();
+    }
 
-    @Test @DisplayName("listActive devolve lista parseada e envia Authorization")
+    @Test
+    @DisplayName("listActive devolve lista parseada e envia Authorization")
     void listActiveOk() throws InterruptedException {
-        mockWebServer.enqueue(new MockResponse()
-                .setResponseCode(200)
-                .setHeader("Content-Type", "application/json")
-                .setBody("[{\"flowId\":\"a\",\"versao\":\"1.0\",\"ativo\":true}," +
-                        "{\"flowId\":\"b\",\"versao\":\"2.0\",\"ativo\":true}]"));
+        mockWebServer.enqueue(
+                new MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Type", "application/json")
+                        .setBody(
+                                "[{\"flowId\":\"a\",\"versao\":\"1.0\",\"ativo\":true},"
+                                        + "{\"flowId\":\"b\",\"versao\":\"2.0\",\"ativo\":true}]"));
 
         var ativos = client.listActive();
         assertThat(ativos).hasSize(2);
@@ -68,25 +93,34 @@ class ManagerWorkflowClientTest {
         assertThat(req.getHeader("Authorization")).isEqualTo("Bearer test-token");
     }
 
-    @Test @DisplayName("listActive devolve lista vazia quando body é null")
+    @Test
+    @DisplayName("listActive devolve lista vazia quando body é null")
     void listActiveVazio() {
-        mockWebServer.enqueue(new MockResponse().setResponseCode(200)
-                .setHeader("Content-Type", "application/json").setBody("[]"));
+        mockWebServer.enqueue(
+                new MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Type", "application/json")
+                        .setBody("[]"));
         assertThat(client.listActive()).isEmpty();
     }
 
-    @Test @DisplayName("listActive propaga WebClientResponseException em 5xx")
+    @Test
+    @DisplayName("listActive propaga WebClientResponseException em 5xx")
     void listActiveErroServidor() {
         mockWebServer.enqueue(new MockResponse().setResponseCode(500).setBody("boom"));
         assertThatThrownBy(() -> client.listActive())
                 .isInstanceOf(WebClientResponseException.class);
     }
 
-    @Test @DisplayName("fetchYaml retorna o body cru e envia Authorization")
+    @Test
+    @DisplayName("fetchYaml retorna o body cru e envia Authorization")
     void fetchYamlOk() throws InterruptedException {
         String yaml = "fluxo:\n  id: x\n";
-        mockWebServer.enqueue(new MockResponse().setResponseCode(200)
-                .setHeader("Content-Type", "application/x-yaml").setBody(yaml));
+        mockWebServer.enqueue(
+                new MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Type", "application/x-yaml")
+                        .setBody(yaml));
 
         String result = client.fetchYaml("flow-x", "1.0.0");
         assertThat(result).isEqualTo(yaml);
@@ -96,7 +130,8 @@ class ManagerWorkflowClientTest {
         assertThat(req.getHeader("Authorization")).isEqualTo("Bearer test-token");
     }
 
-    @Test @DisplayName("fetchYaml lança FlowNotFoundException quando body vazio")
+    @Test
+    @DisplayName("fetchYaml lança FlowNotFoundException quando body vazio")
     void fetchYamlBodyVazio() {
         mockWebServer.enqueue(new MockResponse().setResponseCode(200).setBody(""));
         assertThatThrownBy(() -> client.fetchYaml("flow-x", "1.0.0"))
@@ -104,15 +139,18 @@ class ManagerWorkflowClientTest {
                 .hasMessageContaining("YAML vazio");
     }
 
-    @Test @DisplayName("fetchYaml mapeia 404 do Manager para FlowNotFoundException")
+    @Test
+    @DisplayName("fetchYaml mapeia 404 do Manager para FlowNotFoundException")
     void fetchYaml404() {
-        mockWebServer.enqueue(new MockResponse().setResponseCode(404).setBody("{\"error\":\"FLOW_NOT_FOUND\"}"));
+        mockWebServer.enqueue(
+                new MockResponse().setResponseCode(404).setBody("{\"error\":\"FLOW_NOT_FOUND\"}"));
         assertThatThrownBy(() -> client.fetchYaml("nope", "9.9.9"))
                 .isInstanceOf(FlowNotFoundException.class)
                 .hasMessageContaining("nope");
     }
 
-    @Test @DisplayName("fetchYaml propaga WebClientResponseException em 5xx")
+    @Test
+    @DisplayName("fetchYaml propaga WebClientResponseException em 5xx")
     void fetchYaml500() {
         mockWebServer.enqueue(new MockResponse().setResponseCode(500).setBody("boom"));
         assertThatThrownBy(() -> client.fetchYaml("flow-x", "1.0.0"))

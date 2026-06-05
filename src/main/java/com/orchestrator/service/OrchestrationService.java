@@ -1,3 +1,26 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Luiz
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 package com.orchestrator.service;
 
 import com.orchestrator.domain.execution.ExecutionStatus;
@@ -8,14 +31,13 @@ import com.orchestrator.domain.model.IntegrationDefinition;
 import com.orchestrator.exception.IntegrationExecutionException;
 import com.orchestrator.integration.IntegrationExecutorFactory;
 import com.orchestrator.manager.WorkflowCacheService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
@@ -34,22 +56,31 @@ public class OrchestrationService {
         ctx.setStatus(ExecutionStatus.RUNNING);
         ctx.setContract(payload != null ? payload : Map.of());
 
-        log.info("Starting execution [{}] of flow: {} version: {}", ctx.getExecutionId(), flowId, version);
+        log.info(
+                "Starting execution [{}] of flow: {} version: {}",
+                ctx.getExecutionId(),
+                flowId,
+                version);
 
         try {
             FlowDefinition def = workflowCacheService.load(flowId, version);
             contractValidationService.validate(def.getContract(), ctx.getContract());
 
             boolean hadError = false;
-            for (IntegrationDefinition i : def.getIntegrations().stream()
-                    .sorted(Comparator.comparingInt(IntegrationDefinition::getOrder)).toList()) {
+            for (IntegrationDefinition i :
+                    def.getIntegrations().stream()
+                            .sorted(Comparator.comparingInt(IntegrationDefinition::getOrder))
+                            .toList()) {
                 try {
                     Object result = executorFactory.get(i.getType()).execute(i, ctx);
                     ctx.putIntegrationResult(i.getId(), applyMapping(i, result));
                     log.info("Integration '{}' OK", i.getId());
                 } catch (Exception e) {
                     if (i.isContinueOnError()) {
-                        log.warn("Integration '{}' failed (continuing): {}", i.getId(), e.getMessage());
+                        log.warn(
+                                "Integration '{}' failed (continuing): {}",
+                                i.getId(),
+                                e.getMessage());
                         ctx.putIntegrationResult(i.getId(), Map.of("error", e.getMessage()));
                         hadError = true;
                     } else {
@@ -60,15 +91,20 @@ public class OrchestrationService {
             }
 
             if (def.getValidations() != null && !def.getValidations().isEmpty()) {
-                for (IntegrationDefinition v : def.getValidations().stream()
-                        .sorted(Comparator.comparingInt(IntegrationDefinition::getOrder)).toList()) {
+                for (IntegrationDefinition v :
+                        def.getValidations().stream()
+                                .sorted(Comparator.comparingInt(IntegrationDefinition::getOrder))
+                                .toList()) {
                     try {
                         Object result = executorFactory.get(v.getType()).execute(v, ctx);
                         ctx.putValidationResult(v.getId(), applyMapping(v, result));
                         log.info("Validation '{}' OK", v.getId());
                     } catch (Exception e) {
                         if (v.isContinueOnError()) {
-                            log.warn("Validation '{}' failed (continuing): {}", v.getId(), e.getMessage());
+                            log.warn(
+                                    "Validation '{}' failed (continuing): {}",
+                                    v.getId(),
+                                    e.getMessage());
                             ctx.putValidationResult(v.getId(), Map.of("error", e.getMessage()));
                             hadError = true;
                         } else {
@@ -107,14 +143,16 @@ public class OrchestrationService {
 
     @SuppressWarnings("unchecked")
     private Object applyMapping(IntegrationDefinition i, Object result) {
-        var mapping = switch (i.getType()) {
-            case HTTP -> i.getHttp() != null ? i.getHttp().getResponseMapping() : null;
-            default -> null;
-        };
+        var mapping =
+                switch (i.getType()) {
+                    case HTTP -> i.getHttp() != null ? i.getHttp().getResponseMapping() : null;
+                    default -> null;
+                };
         if (mapping == null || mapping.getSourceField() == null) return result;
         if (result instanceof Map<?, ?> m) {
             Object v = ((Map<String, Object>) m).get(mapping.getSourceField());
-            return Map.of(mapping.getTargetField() != null ? mapping.getTargetField() : "value",
+            return Map.of(
+                    mapping.getTargetField() != null ? mapping.getTargetField() : "value",
                     v != null ? v : "");
         }
         return result;

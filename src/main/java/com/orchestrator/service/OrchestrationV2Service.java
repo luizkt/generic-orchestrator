@@ -1,3 +1,26 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Luiz
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 package com.orchestrator.service;
 
 import com.orchestrator.domain.execution.ExecutionStatus;
@@ -8,10 +31,6 @@ import com.orchestrator.domain.model.IntegrationDefinition;
 import com.orchestrator.exception.IntegrationExecutionException;
 import com.orchestrator.integration.IntegrationExecutorFactory;
 import com.orchestrator.manager.WorkflowCacheService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,14 +43,17 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 /**
  * Executa o fluxo com paralelismo por grupo de {@code order}.
  *
- * Integrações com o mesmo valor de {@code order} são disparadas simultaneamente
- * via Java Virtual Threads (Project Loom). Grupos distintos são executados em
- * sequência — o grupo N+1 só começa após todos os itens do grupo N terminarem.
- * Após todas as integrações, a fase de validações é executada com o mesmo padrão.
+ * <p>Integrações com o mesmo valor de {@code order} são disparadas simultaneamente via Java Virtual
+ * Threads (Project Loom). Grupos distintos são executados em sequência — o grupo N+1 só começa após
+ * todos os itens do grupo N terminarem. Após todas as integrações, a fase de validações é executada
+ * com o mesmo padrão.
  */
 @Slf4j
 @Service
@@ -50,7 +72,11 @@ public class OrchestrationV2Service {
         ctx.setStatus(ExecutionStatus.RUNNING);
         ctx.setContract(payload != null ? payload : Map.of());
 
-        log.info("[v2] Starting execution [{}] of flow: {} version: {}", ctx.getExecutionId(), flowId, version);
+        log.info(
+                "[v2] Starting execution [{}] of flow: {} version: {}",
+                ctx.getExecutionId(),
+                flowId,
+                version);
 
         try {
             FlowDefinition def = workflowCacheService.load(flowId, version);
@@ -58,10 +84,13 @@ public class OrchestrationV2Service {
 
             AtomicBoolean hadError = new AtomicBoolean(false);
 
-            executePhase(def.getIntegrations(), ctx, hadError, ctx::putIntegrationResult, "integration");
-            executePhase(def.getValidations(), ctx, hadError, ctx::putValidationResult, "validation");
+            executePhase(
+                    def.getIntegrations(), ctx, hadError, ctx::putIntegrationResult, "integration");
+            executePhase(
+                    def.getValidations(), ctx, hadError, ctx::putValidationResult, "validation");
 
-            ctx.setStatus(hadError.get() ? ExecutionStatus.PARTIAL_SUCCESS : ExecutionStatus.SUCCESS);
+            ctx.setStatus(
+                    hadError.get() ? ExecutionStatus.PARTIAL_SUCCESS : ExecutionStatus.SUCCESS);
             ctx.setFinishedAt(LocalDateTime.now());
             return build(ctx, null);
 
@@ -74,12 +103,20 @@ public class OrchestrationV2Service {
         }
     }
 
-    private void executePhase(List<IntegrationDefinition> steps, FlowExecutionContext ctx,
-                               AtomicBoolean hadError, BiConsumer<String, Object> resultStore,
-                               String stepType) {
+    private void executePhase(
+            List<IntegrationDefinition> steps,
+            FlowExecutionContext ctx,
+            AtomicBoolean hadError,
+            BiConsumer<String, Object> resultStore,
+            String stepType) {
         if (steps == null || steps.isEmpty()) return;
-        Map<Integer, List<IntegrationDefinition>> byOrder = steps.stream()
-                .collect(Collectors.groupingBy(IntegrationDefinition::getOrder, TreeMap::new, Collectors.toList()));
+        Map<Integer, List<IntegrationDefinition>> byOrder =
+                steps.stream()
+                        .collect(
+                                Collectors.groupingBy(
+                                        IntegrationDefinition::getOrder,
+                                        TreeMap::new,
+                                        Collectors.toList()));
         for (List<IntegrationDefinition> group : byOrder.values()) {
             if (group.size() == 1) {
                 runStep(group.get(0), ctx, hadError, resultStore, stepType);
@@ -89,15 +126,28 @@ public class OrchestrationV2Service {
         }
     }
 
-    private void executeGroupParallel(List<IntegrationDefinition> group, FlowExecutionContext ctx,
-                                      AtomicBoolean hadError, BiConsumer<String, Object> resultStore,
-                                      String stepType) {
+    private void executeGroupParallel(
+            List<IntegrationDefinition> group,
+            FlowExecutionContext ctx,
+            AtomicBoolean hadError,
+            BiConsumer<String, Object> resultStore,
+            String stepType) {
         List<IntegrationExecutionException> requiredFailures = new ArrayList<>();
 
         try (ExecutorService vte = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Future<?>> futures = group.stream()
-                    .<Future<?>>map(i -> vte.submit(() -> runStep(i, ctx, hadError, resultStore, stepType)))
-                    .toList();
+            List<Future<?>> futures =
+                    group.stream()
+                            .<Future<?>>map(
+                                    i ->
+                                            vte.submit(
+                                                    () ->
+                                                            runStep(
+                                                                    i,
+                                                                    ctx,
+                                                                    hadError,
+                                                                    resultStore,
+                                                                    stepType)))
+                            .toList();
 
             for (Future<?> f : futures) {
                 try {
@@ -116,15 +166,23 @@ public class OrchestrationV2Service {
         }
     }
 
-    private void runStep(IntegrationDefinition i, FlowExecutionContext ctx, AtomicBoolean hadError,
-                         BiConsumer<String, Object> resultStore, String stepType) {
+    private void runStep(
+            IntegrationDefinition i,
+            FlowExecutionContext ctx,
+            AtomicBoolean hadError,
+            BiConsumer<String, Object> resultStore,
+            String stepType) {
         try {
             Object result = executorFactory.get(i.getType()).execute(i, ctx);
             resultStore.accept(i.getId(), applyMapping(i, result));
             log.info("[v2] {} '{}' OK", stepType, i.getId());
         } catch (Exception e) {
             if (i.isContinueOnError()) {
-                log.warn("[v2] {} '{}' failed (continuing): {}", stepType, i.getId(), e.getMessage());
+                log.warn(
+                        "[v2] {} '{}' failed (continuing): {}",
+                        stepType,
+                        i.getId(),
+                        e.getMessage());
                 resultStore.accept(i.getId(), Map.of("error", e.getMessage()));
                 hadError.set(true);
             } else {
@@ -149,14 +207,16 @@ public class OrchestrationV2Service {
 
     @SuppressWarnings("unchecked")
     private Object applyMapping(IntegrationDefinition i, Object result) {
-        var mapping = switch (i.getType()) {
-            case HTTP -> i.getHttp() != null ? i.getHttp().getResponseMapping() : null;
-            default -> null;
-        };
+        var mapping =
+                switch (i.getType()) {
+                    case HTTP -> i.getHttp() != null ? i.getHttp().getResponseMapping() : null;
+                    default -> null;
+                };
         if (mapping == null || mapping.getSourceField() == null) return result;
         if (result instanceof Map<?, ?> m) {
             Object v = ((Map<String, Object>) m).get(mapping.getSourceField());
-            return Map.of(mapping.getTargetField() != null ? mapping.getTargetField() : "value",
+            return Map.of(
+                    mapping.getTargetField() != null ? mapping.getTargetField() : "value",
                     v != null ? v : "");
         }
         return result;

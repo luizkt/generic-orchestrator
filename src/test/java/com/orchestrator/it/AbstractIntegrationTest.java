@@ -1,3 +1,26 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Luiz
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 package com.orchestrator.it;
 
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,14 +39,17 @@ import org.testcontainers.utility.DockerImageName;
 @Testcontainers
 public abstract class AbstractIntegrationTest {
 
-    static final RabbitMQContainer RABBIT = new RabbitMQContainer(DockerImageName.parse("rabbitmq:3-management"));
-    static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"));
-    static final LocalStackContainer LOCALSTACK = new LocalStackContainer(
-            DockerImageName.parse("localstack/localstack:3"))
-            .withServices(LocalStackContainer.Service.SQS);
+    static final RabbitMQContainer RABBIT =
+            new RabbitMQContainer(DockerImageName.parse("rabbitmq:3-management"));
+    static final KafkaContainer KAFKA =
+            new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"));
+    static final LocalStackContainer LOCALSTACK =
+            new LocalStackContainer(DockerImageName.parse("localstack/localstack:3"))
+                    .withServices(LocalStackContainer.Service.SQS);
+
     @SuppressWarnings("resource")
-    static final GenericContainer<?> REDIS = new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-            .withExposedPorts(6379);
+    static final GenericContainer<?> REDIS =
+            new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
 
     static {
         RABBIT.start();
@@ -42,8 +68,9 @@ public abstract class AbstractIntegrationTest {
         r.add("spring.rabbitmq.password", RABBIT::getAdminPassword);
         r.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
         r.add("orchestrator.aws.region", () -> LOCALSTACK.getRegion());
-        r.add("orchestrator.aws.sqs.endpoint", () ->
-                LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.SQS).toString());
+        r.add(
+                "orchestrator.aws.sqs.endpoint",
+                () -> LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.SQS).toString());
         r.add("orchestrator.aws.sqs.access-key", LOCALSTACK::getAccessKey);
         r.add("orchestrator.aws.sqs.secret-key", LOCALSTACK::getSecretKey);
 

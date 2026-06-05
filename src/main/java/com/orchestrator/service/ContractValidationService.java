@@ -1,12 +1,34 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2026 Luiz
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 package com.orchestrator.service;
 
 import com.orchestrator.domain.model.*;
 import com.orchestrator.exception.ContractValidationException;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
 import java.util.*;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
@@ -21,8 +43,11 @@ public class ContractValidationService {
     }
 
     @SuppressWarnings("unchecked")
-    private void validateFields(List<FieldDefinition> fields, Map<String, Object> payload,
-                                List<String> errors, String parentPath) {
+    private void validateFields(
+            List<FieldDefinition> fields,
+            Map<String, Object> payload,
+            List<String> errors,
+            String parentPath) {
         for (FieldDefinition f : fields) {
             String path = parentPath.isEmpty() ? f.getName() : parentPath + "." + f.getName();
             Object value = payload != null ? payload.get(f.getName()) : null;
@@ -45,13 +70,20 @@ public class ContractValidationService {
                 }
             }
 
-            if (f.getType() == FieldType.OBJECT && f.getObject() != null && value instanceof Map<?, ?> m) {
+            if (f.getType() == FieldType.OBJECT
+                    && f.getObject() != null
+                    && value instanceof Map<?, ?> m) {
                 validateFields(f.getObject().getFields(), (Map<String, Object>) m, errors, path);
-            } else if (f.getType() == FieldType.ARRAY && f.getObject() != null && value instanceof List<?> l) {
+            } else if (f.getType() == FieldType.ARRAY
+                    && f.getObject() != null
+                    && value instanceof List<?> l) {
                 for (int i = 0; i < l.size(); i++) {
                     if (l.get(i) instanceof Map<?, ?> m) {
-                        validateFields(f.getObject().getFields(), (Map<String, Object>) m,
-                                errors, path + "[" + i + "]");
+                        validateFields(
+                                f.getObject().getFields(),
+                                (Map<String, Object>) m,
+                                errors,
+                                path + "[" + i + "]");
                     }
                 }
             }
@@ -70,23 +102,39 @@ public class ContractValidationService {
     }
 
     private String applyRule(ValidationRule r, Object v, String path) {
-        String defaultMsg = String.format("Validation '%s' failed for field '%s'", r.getType(), path);
+        String defaultMsg =
+                String.format("Validation '%s' failed for field '%s'", r.getType(), path);
         String msg = r.getMessage() != null ? r.getMessage() : defaultMsg;
         return switch (r.getType()) {
             case NOT_BLANK -> (v instanceof String s && s.isBlank()) ? msg : null;
             case NOT_EMPTY -> (v instanceof Collection<?> c && c.isEmpty()) ? msg : null;
             case NOT_NULL -> v == null ? msg : null;
-            case PATTERN -> (v instanceof String s && r.getValue() != null
-                    && !Pattern.matches(r.getValue(), s)) ? msg : null;
+            case PATTERN ->
+                    (v instanceof String s
+                                    && r.getValue() != null
+                                    && !Pattern.matches(r.getValue(), s))
+                            ? msg
+                            : null;
             case SIZE -> validateSize(v, r, msg);
-            case MIN -> (v instanceof Number n && r.getValue() != null
-                    && n.doubleValue() < Double.parseDouble(r.getValue())) ? msg : null;
-            case MAX -> (v instanceof Number n && r.getValue() != null
-                    && n.doubleValue() > Double.parseDouble(r.getValue())) ? msg : null;
+            case MIN ->
+                    (v instanceof Number n
+                                    && r.getValue() != null
+                                    && n.doubleValue() < Double.parseDouble(r.getValue()))
+                            ? msg
+                            : null;
+            case MAX ->
+                    (v instanceof Number n
+                                    && r.getValue() != null
+                                    && n.doubleValue() > Double.parseDouble(r.getValue()))
+                            ? msg
+                            : null;
             case POSITIVE -> (v instanceof Number n && n.doubleValue() <= 0) ? msg : null;
             case NEGATIVE -> (v instanceof Number n && n.doubleValue() >= 0) ? msg : null;
-            case EMAIL -> (v instanceof String s
-                    && !Pattern.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$", s)) ? msg : null;
+            case EMAIL ->
+                    (v instanceof String s
+                                    && !Pattern.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$", s))
+                            ? msg
+                            : null;
         };
     }
 
