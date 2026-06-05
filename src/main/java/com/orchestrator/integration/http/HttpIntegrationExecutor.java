@@ -44,6 +44,7 @@ import java.util.Map;
 import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -151,6 +152,8 @@ public class HttpIntegrationExecutor implements IntegrationExecutor {
             List<Integer> retryableStatuses) {
         WebClient.RequestBodySpec spec = webClient.method(HttpMethod.valueOf(method)).uri(url);
         if (http.getHeaders() != null) http.getHeaders().forEach(spec::header);
+        String executionId = MDC.get("executionId");
+        if (executionId != null) spec.header("X-Execution-Id", executionId);
 
         try {
             if (body != null && !body.isBlank()) {

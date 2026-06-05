@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -49,18 +50,22 @@ public class OrchestrationService {
     private final IntegrationExecutorFactory executorFactory;
 
     public FlowExecutionResult execute(String version, String flowId, Map<String, Object> payload) {
+        String executionId = MDC.get("executionId");
+        if (executionId == null) {
+            executionId = UUID.randomUUID().toString();
+            MDC.put("executionId", executionId);
+        }
+        MDC.put("flowId", flowId);
+        MDC.put("version", version);
+
         FlowExecutionContext ctx = new FlowExecutionContext();
-        ctx.setExecutionId(UUID.randomUUID().toString());
+        ctx.setExecutionId(executionId);
         ctx.setFlowId(flowId);
         ctx.setStartedAt(LocalDateTime.now());
         ctx.setStatus(ExecutionStatus.RUNNING);
         ctx.setContract(payload != null ? payload : Map.of());
 
-        log.info(
-                "Starting execution [{}] of flow: {} version: {}",
-                ctx.getExecutionId(),
-                flowId,
-                version);
+        log.info("Starting execution [{}] of flow: {} version: {}", executionId, flowId, version);
 
         try {
             FlowDefinition def = workflowCacheService.load(flowId, version);

@@ -45,6 +45,7 @@ import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 /**
@@ -65,8 +66,16 @@ public class OrchestrationV2Service {
     private final IntegrationExecutorFactory executorFactory;
 
     public FlowExecutionResult execute(String version, String flowId, Map<String, Object> payload) {
+        String executionId = MDC.get("executionId");
+        if (executionId == null) {
+            executionId = UUID.randomUUID().toString();
+            MDC.put("executionId", executionId);
+        }
+        MDC.put("flowId", flowId);
+        MDC.put("version", version);
+
         FlowExecutionContext ctx = new FlowExecutionContext();
-        ctx.setExecutionId(UUID.randomUUID().toString());
+        ctx.setExecutionId(executionId);
         ctx.setFlowId(flowId);
         ctx.setStartedAt(LocalDateTime.now());
         ctx.setStatus(ExecutionStatus.RUNNING);
@@ -74,7 +83,7 @@ public class OrchestrationV2Service {
 
         log.info(
                 "[v2] Starting execution [{}] of flow: {} version: {}",
-                ctx.getExecutionId(),
+                executionId,
                 flowId,
                 version);
 
@@ -133,6 +142,9 @@ public class OrchestrationV2Service {
             BiConsumer<String, Object> resultStore,
             String stepType) {
         List<IntegrationExecutionException> requiredFailures = new ArrayList<>();
+        // Captura o MDC do thread chamador para propagar para as Virtual Threads,
+        // que não herdam ThreadLocal do parent por padrão.
+        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
 
         try (ExecutorService vte = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<?>> futures =
@@ -140,13 +152,20 @@ public class OrchestrationV2Service {
                             .<Future<?>>map(
                                     i ->
                                             vte.submit(
-                                                    () ->
+                                                    () -> {
+                                                        if (mdcSnapshot != null)
+                                                            MDC.setContextMap(mdcSnapshot);
+                                                        try {
                                                             runStep(
                                                                     i,
                                                                     ctx,
                                                                     hadError,
                                                                     resultStore,
-                                                                    stepType)))
+                                                                    stepType);
+                                                        } finally {
+                                                            MDC.clear();
+                                                        }
+                                                    }))
                             .toList();
 
             for (Future<?> f : futures) {
