@@ -1,0 +1,101 @@
+flow:
+  id: "create-order-v1"
+  description: "Order creation flow"
+  version: "1.0.0"
+  active: true
+
+  contract:
+    fields:
+      - name: "clientId"
+        type: STRING
+        required: true
+        validations:
+          - type: NOT_BLANK
+          - type: PATTERN
+            value: "^[A-Z0-9]{6,20}$"
+            message: "Invalid clientId"
+      - name: "amount"
+        type: DECIMAL
+        required: true
+        validations:
+          - type: POSITIVE
+
+  integrations:
+    - id: "validate-client"
+      order: 1
+      type: HTTP
+      continueOnError: false
+      http:
+        # In dev/local, "api.exemplo.com" resolves to the WireMock container
+        # via network alias in docker-compose-service-portal.yml.
+        url: "http://api.exemplo.com/clients/{{contract.clientId}}"
+        method: GET
+        headers:
+          Content-Type: "application/json"
+        timeout: 5000
+
+    - id: "save-order"
+      order: 2
+      type: HTTP
+      continueOnError: false
+      http:
+        # Domain persistence is responsibility of a downstream service
+        # (no longer the orchestrator). The example simulates it via WireMock.
+        url: "http://api.exemplo.com/orders"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+        bodyTemplate: |
+          {"clientId":"{{contract.clientId}}","amount":"{{contract.amount}}","status":"CREATED"}
+        timeout: 5000
+        responseMapping:
+          targetField: "orderId"
+          sourceField: "id"
+
+    # O id do passo QUEUE deve casar com o id do broker em orch-integrations.rabbitmqs
+    - id: "rabbitmq-notifier"
+      order: 3
+      type: QUEUE
+      provider: RABBITMQ
+      continueOnError: true
+      queue:
+        exchange: "orders.exchange"
+        routingKey: "order.created"
+        messageTemplate: |
+          {"event":"ORDER_CREATED","orderId":"{{integrations.save-order.orderId}}"}
+        persistent: true
+
+    # O id do passo QUEUE deve casar com o id do broker em orch-integrations.kafkas
+    - id: "kafka-user-tracking"
+      order: 4
+      type: QUEUE
+      provider: KAFKA
+      continueOnError: true
+      queue:
+        topic: "orders.created"
+        messageTemplate: |
+          {"orderId":"{{integrations.save-order.orderId}}"}
+
+    - id: "notify-sqs"
+      order: 5
+      type: QUEUE
+      provider: SQS
+      continueOnError: true
+      queue:
+        queueUrl: "https://sqs.us-east-1.amazonaws.com/123/orders"
+        messageTemplate: |
+          {"orderId":"{{integrations.save-order.orderId}}"}
+
+  # Executed after ALL integrations complete.
+  # Uses the same structure as integrations (HTTP calls to external validation services).
+  validations:
+    - id: "check-credit-limit"
+      order: 1
+      type: HTTP
+      continueOnError: false
+      http:
+        url: "http://api.exemplo.com/clients/{{contract.clientId}}/credit"
+        method: GET
+        headers:
+          Content-Type: "application/json"
+        timeout: 5000

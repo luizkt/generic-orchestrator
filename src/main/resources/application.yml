@@ -1,0 +1,92 @@
+spring:
+  application:
+    name: generic-orchestrator
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT_MS:2000}ms
+  cache:
+    type: redis
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+orchestrator:
+  http-client:
+    connect-timeout: ${HTTP_CONNECT_TIMEOUT:5000}
+    read-timeout: ${HTTP_READ_TIMEOUT:30000}
+  security:
+    jwt:
+      secret: ${JWT_SECRET:CHANGE_ME_PLEASE_THIS_IS_A_DEV_ONLY_SECRET_AT_LEAST_64_CHARS_LONG_FOR_HS512}
+      expiration-seconds: ${JWT_EXPIRATION:3600}
+      issuer: ${JWT_ISSUER:generic-orchestrator}
+  manager:
+    base-url: ${MANAGER_URL:http://localhost:8082}
+    username: ${MANAGER_USERNAME:admin}
+    password: ${MANAGER_PASSWORD:admin}
+    timeout-ms: ${MANAGER_TIMEOUT_MS:5000}
+  cache:
+    workflows:
+      ttl-seconds: ${WORKFLOWS_CACHE_TTL_SECONDS:3600}
+      warm-up-enabled: ${WORKFLOWS_WARM_UP_ENABLED:true}
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    sqs:
+      endpoint: ${AWS_SQS_ENDPOINT:}
+      access-key: ${AWS_ACCESS_KEY_ID:}
+      secret-key: ${AWS_SECRET_ACCESS_KEY:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+server:
+  port: ${SERVER_PORT:8080}
+
+orch-integrations:
+  rabbitmqs:
+    - id: rabbitmq-notifier
+      host: ${RABBITMQ_HOST:localhost}
+      port: ${RABBITMQ_PORT:5672}
+      username: ${RABBITMQ_USERNAME:guest}
+      password: ${RABBITMQ_PASSWORD:guest}
+  kafkas:
+    - id: kafka-user-tracking
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS_1:localhost:9092}
+      producer:
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  retry-configuration:
+    maximum-attempts: 3
+    delay: 100
+    backoff-multiplier: 2.0
+    maximum-delay: 10000
+    retryable-http-condition:
+      - 500
+      - 429
+      - 408
+    timeout: 1000
+  circuit-breaker-configuration:
+    sliding-window-size: 10
+    sliding-window-size-type: COUNT
+    minimum-number-calls: 100
+    failure-rate-threshold: 50
+    wait-duration-open-state: 30
+    permitted-calls-open-state: 10
+    automatic-transition-half-open-enabled: true
+    slow-call-duration-threshold: 800
+
+logging:
+  level:
+    com.orchestrator: DEBUG

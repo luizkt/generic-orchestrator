@@ -1,0 +1,42 @@
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT_MS:2000}ms
+  cache:
+    type: redis
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+
+orch-integrations:
+  rabbitmqs:
+    - id: rabbitmq-notifier
+      host: ${RABBITMQ_HOST:rabbitmq}
+      port: ${RABBITMQ_PORT:5672}
+      username: ${RABBITMQ_USERNAME:guest}
+      password: ${RABBITMQ_PASSWORD:guest}
+  kafkas:
+    - id: kafka-user-tracking
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS_1:kafka:9092}
+      producer:
+        key-serializer: org.apache.kafka.common.serialization.StringSerializer
+        value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+orchestrator:
+  manager:
+    base-url: ${MANAGER_URL:http://manager:8082}
+    username: ${MANAGER_USERNAME:admin}
+    password: ${MANAGER_PASSWORD:admin}
+  aws:
+    region: ${AWS_REGION:us-east-1}
+    sqs:
+      endpoint: ${AWS_SQS_ENDPOINT:http://localstack:4566}
+      access-key: ${AWS_ACCESS_KEY_ID:test}
+      secret-key: ${AWS_SECRET_ACCESS_KEY:test}
