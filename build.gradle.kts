@@ -27,8 +27,10 @@ extra["awsSdkVersion"] = "2.30.0"
 extra["jjwtVersion"] = "0.12.6"
 extra["testcontainersVersion"] = "1.20.4"
 extra["resilience4jVersion"] = "2.2.0"
+extra["sbaVersion"] = "3.4.0"
 
 dependencies {
+    implementation("de.codecentric:spring-boot-admin-starter-client:${property("sbaVersion")}")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")

@@ -19,6 +19,12 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+  boot:
+    admin:
+      client:
+        url: ${SPRING_BOOT_ADMIN_URL:http://localhost:8085}
+        username: ${SBA_USERNAME:admin}
+        password: ${SBA_PASSWORD:admin}
 
 orchestrator:
   http-client:
@@ -49,7 +55,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,threaddump,heapdump,loggers,env,beans,caches
+  endpoint:
+    health:
+      show-details: always
 
 server:
   port: ${SERVER_PORT:8080}

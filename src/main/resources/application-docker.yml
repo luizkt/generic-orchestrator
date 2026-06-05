@@ -1,4 +1,10 @@
 spring:
+  boot:
+    admin:
+      client:
+        url: ${SPRING_BOOT_ADMIN_URL:http://spring-boot-admin:8080}
+        instance:
+          service-base-url: http://orchestrator:${SERVER_PORT:8080}
   data:
     redis:
       host: ${REDIS_HOST:redis}
