@@ -43,7 +43,7 @@ public class WebClientConfig {
     private int readTimeout;
 
     @Bean
-    public WebClient webClient() {
+    public WebClient webClient(WebClient.Builder builder) {
         HttpClient httpClient =
                 HttpClient.create()
                         .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout)
@@ -52,8 +52,6 @@ public class WebClientConfig {
                                         c.addHandlerLast(
                                                 new ReadTimeoutHandler(
                                                         readTimeout, TimeUnit.MILLISECONDS)));
-        return WebClient.builder()
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .build();
+        return builder.clientConnector(new ReactorClientHttpConnector(httpClient)).build();
     }
 }

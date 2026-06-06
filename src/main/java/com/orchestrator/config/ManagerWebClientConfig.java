@@ -36,9 +36,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class ManagerWebClientConfig {
 
     @Bean
-    public WebClient managerWebClient(ManagerProperties props) {
-        return WebClient.builder()
-                .baseUrl(props.getBaseUrl())
+    public WebClient managerWebClient(WebClient.Builder builder, ManagerProperties props) {
+        return builder.baseUrl(props.getBaseUrl())
                 .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .build();
     }

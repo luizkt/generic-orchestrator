@@ -31,6 +31,8 @@ import com.orchestrator.domain.model.IntegrationDefinition;
 import com.orchestrator.exception.IntegrationExecutionException;
 import com.orchestrator.integration.IntegrationExecutorFactory;
 import com.orchestrator.manager.WorkflowCacheService;
+import io.opentelemetry.context.Context;
+import io.opentelemetry.context.Scope;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -142,9 +144,10 @@ public class OrchestrationV2Service {
             BiConsumer<String, Object> resultStore,
             String stepType) {
         List<IntegrationExecutionException> requiredFailures = new ArrayList<>();
-        // Captura o MDC do thread chamador para propagar para as Virtual Threads,
-        // que não herdam ThreadLocal do parent por padrão.
         Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
+        // Captura o contexto OTel e MDC antes de submeter às Virtual Threads,
+        // que não herdam ThreadLocal do parent por padrão.
+        Context otelCtx = Context.current();
 
         try (ExecutorService vte = Executors.newVirtualThreadPerTaskExecutor()) {
             List<Future<?>> futures =
@@ -153,17 +156,20 @@ public class OrchestrationV2Service {
                                     i ->
                                             vte.submit(
                                                     () -> {
-                                                        if (mdcSnapshot != null)
-                                                            MDC.setContextMap(mdcSnapshot);
-                                                        try {
-                                                            runStep(
-                                                                    i,
-                                                                    ctx,
-                                                                    hadError,
-                                                                    resultStore,
-                                                                    stepType);
-                                                        } finally {
-                                                            MDC.clear();
+                                                        try (Scope ignored =
+                                                                otelCtx.makeCurrent()) {
+                                                            if (mdcSnapshot != null)
+                                                                MDC.setContextMap(mdcSnapshot);
+                                                            try {
+                                                                runStep(
+                                                                        i,
+                                                                        ctx,
+                                                                        hadError,
+                                                                        resultStore,
+                                                                        stepType);
+                                                            } finally {
+                                                                MDC.clear();
+                                                            }
                                                         }
                                                     }))
                             .toList();

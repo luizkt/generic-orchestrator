@@ -35,6 +35,11 @@ orch-integrations:
         key-serializer: org.apache.kafka.common.serialization.StringSerializer
         value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
+management:
+  otlp:
+    tracing:
+      endpoint: http://jaeger:4318/v1/traces
+
 orchestrator:
   manager:
     base-url: ${MANAGER_URL:http://manager:8082}
