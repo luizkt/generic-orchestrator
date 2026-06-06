@@ -27,11 +27,13 @@ import com.orchestrator.domain.execution.FlowExecutionResult;
 import com.orchestrator.dto.OrchestrationResponse;
 import com.orchestrator.service.OrchestrationService;
 import com.orchestrator.service.OrchestrationV2Service;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "Execução")
 @RestController
 @RequiredArgsConstructor
 public class OrchestrationController {

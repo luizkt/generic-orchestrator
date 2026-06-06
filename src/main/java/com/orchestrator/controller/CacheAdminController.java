@@ -24,6 +24,7 @@
 package com.orchestrator.controller;
 
 import com.orchestrator.manager.WorkflowCacheService;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -40,6 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>Protegido por {@code anyRequest().authenticated()} no SecurityConfig — exige Bearer JWT
  * interno (admin/admin via {@code POST /api/auth/tokens}).
  */
+@Tag(name = "Cache Admin")
 @RestController
 @RequestMapping("/api/admin/cache")
 @RequiredArgsConstructor

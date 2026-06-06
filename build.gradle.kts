@@ -62,6 +62,9 @@ dependencies {
     implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 
+    // Swagger / OpenAPI
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8")
+
     // Lombok
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")

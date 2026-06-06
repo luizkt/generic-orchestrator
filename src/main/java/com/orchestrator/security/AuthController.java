@@ -25,6 +25,7 @@ package com.orchestrator.security;
 
 import com.orchestrator.dto.LoginRequest;
 import com.orchestrator.dto.LoginResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.*;
  * POST in the {@code tokens} collection creates a new JWT — REST-shape. Replaces the previous
  * verb-based {@code /api/auth/login} path.
  */
+@Tag(name = "Auth")
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor

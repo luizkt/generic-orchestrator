@@ -24,6 +24,7 @@
 package com.orchestrator.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -90,6 +91,12 @@ class SecurityIT extends AbstractIntegrationTest {
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /v3/api-docs is public, returns 200 without token")
+    void swaggerApiDocsPublic() throws Exception {
+        mockMvc.perform(get("/v3/api-docs")).andExpect(status().isOk());
     }
 
     @Test

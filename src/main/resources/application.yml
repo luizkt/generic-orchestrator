@@ -69,6 +69,19 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true
+    web:
+      server:
+        request:
+          ignore-patterns:
+            - /actuator/health
+            - /actuator/prometheus
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+  use-fn-routes: false
 
 server:
   port: ${SERVER_PORT:8080}
