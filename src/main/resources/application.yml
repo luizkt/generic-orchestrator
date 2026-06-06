@@ -55,7 +55,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,threaddump,heapdump,loggers,env,beans,caches
+        include: health,info,metrics,prometheus,threaddump,heapdump,loggers,env,beans,caches
   endpoint:
     health:
       show-details: always
@@ -65,6 +65,10 @@ management:
   otlp:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
 
 server:
   port: ${SERVER_PORT:8080}
