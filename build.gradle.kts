@@ -5,7 +5,7 @@ plugins {
     jacoco
     id("org.springframework.boot") version "3.4.5"
     id("io.spring.dependency-management") version "1.1.7"
-    id("com.diffplug.spotless") version "6.25.0"
+    id("com.diffplug.spotless") version "8.11.0"
 }
 
 group = "com.orchestrator"
@@ -91,7 +91,7 @@ dependencies {
 spotless {
     java {
         licenseHeaderFile(file("${projectDir}/license-header.txt"))
-        googleJavaFormat().aosp()
+        googleJavaFormat("1.19.2").aosp()
         targetExclude("**/build/**", "**/generated/**")
     }
 }
