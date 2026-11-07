@@ -1,5 +1,7 @@
 # Generic Orchestrator
 
+[![CI](https://github.com/luizkt/generic-orchestrator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luizkt/generic-orchestrator/actions/workflows/ci.yml?query=branch%3Amain)
+
 Orquestrador genérico baseado em Java 21 LTS + Spring Boot 3.4 LTS + Gradle.
 
 ## Visão Geral
