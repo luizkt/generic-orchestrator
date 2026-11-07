@@ -95,5 +95,6 @@ docker compose up -d && ./gradlew bootRun   # infra local e app
 - Sem RestTemplate, sem banco, sem atualizar Java 21 ou Spring Boot 3.4.5. Retry e circuit breaker ficam externalizados.
 - Virtual threads não herdam MDC nem contexto OTel: código paralelo novo precisa copiar os dois (`OrchestrationV2Service.executeGroupParallel`).
 - Circuito aberto (`CallNotPermittedException`) não é retentado.
+- Testcontainers 1.20.x com Docker Engine 29 ou mais novo falha ao iniciar o cliente Docker. O `build.gradle.kts` fixa `api.version=1.44` nos testes; ao subir a versão do Testcontainers, reavalie.
 - Todo `.java` precisa do header de licença, senão o Spotless falha.
 - O gate JaCoCo cobre `HttpIntegrationExecutor`, `manager/**`, config de Redis, resiliência e Manager, e `CacheAdminController`: mude essas classes com teste.
