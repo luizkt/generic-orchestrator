@@ -90,7 +90,7 @@ dependencies {
 
 spotless {
     java {
-        licenseHeaderFile(file("${projectDir}/../license-header.txt"))
+        licenseHeaderFile(file("${projectDir}/license-header.txt"))
         googleJavaFormat().aosp()
         targetExclude("**/build/**", "**/generated/**")
     }
