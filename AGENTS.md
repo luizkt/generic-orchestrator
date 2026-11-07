@@ -1,205 +1,100 @@
 # AGENTS.md — generic-orchestrator
 
-Guia de contexto para agentes de IA trabalhando neste componente.
+Índice para agentes de IA. Leia antes de abrir código. Método: `../docs/plans/PLAN-repo-indexing.md` (monorepo).
 
----
+<!-- index:meta
+repo: generic-orchestrator
+tipo: spring-boot-api (executor de fluxos YAML)
+fonte-de-verdade: build.gradle.kts, src/main/resources/application.yml, src/main/java/com/orchestrator
+atualizado-em: 2026-11-07
+-->
 
-## Stack
+## Resumo
 
-| Item | Versão |
-|---|---|
-| Java | 21 (LTS) |
-| Spring Boot | 3.4.5 (LTS) |
-| Build | Gradle Kotlin DSL |
-| HTTP client | Spring WebFlux WebClient (Netty) |
-| Cache | Redis 7 via `spring-boot-starter-data-redis` + `@Cacheable` |
-| Mensageria | RabbitMQ 3, Kafka (Bitnami KRaft), AWS SQS (LocalStack em dev) |
-| Resiliência | Resilience4j 2.2.0 (Retry + CircuitBreaker) |
-| Segurança | JWT HS512 via jjwt 0.12.6 — autenticação interna server-to-server |
-| Porta | 8080 |
+Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e filas), roda validações, devolve resultado consolidado. Não persiste nada e não faz CRUD de workflows (isso é do `service-portal-manager`): busca o YAML no Manager e cacheia no Redis (TTL 1h).
 
----
+<!-- gen:size -->Tamanho: 64 arquivos .java em `src/main`, 17 em `src/test`.<!-- /gen:size -->
 
-## Responsabilidade
-
-O orquestrador **executa fluxos** definidos em YAML. Ele não persiste dados de domínio e não faz CRUD de workflows — essas responsabilidades pertencem ao `service-portal-manager`.
-
-Fluxo de uma requisição:
-```
-POST /api/flows/{flowId}/versions/{version}/executions
-  └─> valida contrato (campos obrigatórios, tipos, regex)
-  └─> carrega FlowDefinition do Redis (ou busca no Manager em cache miss)
-  └─> executa integrações em ordem: HTTP → QUEUE (Rabbit/Kafka/SQS)
-  └─> retorna resultado consolidado
-```
-
----
+Stack: Java 21, Spring Boot 3.4.5 (não atualizar), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
 ## Endpoints
 
-| Método | Path | Auth | Descrição |
-|---|---|---|---|
-| `POST` | `/api/auth/tokens` | Público | Gera JWT (admin/admin) — retorna 201 |
-| `POST` | `/api/flows/{flowId}/versions/{version}/executions` | Bearer JWT | Executa um fluxo |
-| `GET` | `/actuator/health` | Público | Health check |
-| `GET` | `/actuator/info` | Público | Info da aplicação |
-| `GET` | `/actuator/metrics` | Público | Métricas |
-
-O orquestrador **não expõe** endpoints de CRUD de workflows — esses ficam no Manager.
-
----
-
-## Como rodar localmente
-
-### Pré-requisitos
-
-- Java 21 instalado
-- Docker + Docker Compose
-
-### Opção 1 — Só infraestrutura via Docker, app no host
-
-```bash
-cd generic-orchestrator
-docker compose up -d          # sobe Redis, RabbitMQ, Kafka, MongoDB, LocalStack, WireMock, Manager
-./gradlew bootRun             # conecta em localhost:* via portas mapeadas
-```
-
-### Opção 2 — Stack completa
-
-```bash
-# Na raiz do repositório
-docker compose -f docker-compose-service-portal.yml up -d
-```
-
----
-
-## Como testar
-
-```bash
-cd generic-orchestrator
-
-# Testes unitários
-./gradlew test
-
-# Testes unitários + relatório de cobertura
-./gradlew test jacocoTestReport
-# Relatório em: build/reports/jacoco/jacocoTestReport/html/index.html
-
-# Verificação de cobertura (gate ≥ 95% INSTRUCTION nas classes da feature)
-./gradlew jacocoTestCoverageVerification
-
-# Build sem testes
-./gradlew bootJar -x test
-
-# Build da imagem Docker
-docker build -t generic-orchestrator:local .
-```
-
-### Gate de cobertura JaCoCo
-
-O gate cobre especificamente:
-- `integration/http/HttpIntegrationExecutor` — retry + circuit breaker
-- `config/HttpResilienceConfig`, `RetryConfigurationProperties`, `CircuitBreakerConfigurationProperties`
-- `exception/RetriableHttpException`
-- Pacote `manager/**` — cliente, cache e warm-up do Manager
-- `config/RedisCacheConfig`, `ManagerWebClientConfig`, `ManagerProperties`
-
-Cobertura atual: **99% INSTRUCTION** (842/843).
-
----
-
-## Estrutura de pacotes relevante
-
-```
-src/main/java/com/orchestrator/
-├── controller/
-│   └── OrchestrationController        # POST /api/flows/{id}/versions/{v}/executions
-├── security/
-│   ├── AuthController                 # POST /api/auth/tokens
-│   ├── JwtService                     # geração e validação de JWT
-│   └── JwtAuthenticationFilter        # filtro de Bearer token
-├── service/
-│   ├── OrchestrationService           # coordena validação + execução de integrações
-│   ├── ContractValidationService      # valida campos do contrato do fluxo
-│   ├── TemplateResolverService        # resolve {{contract.x}} e {{integrations.step.field}}
-│   └── YamlParserService              # deserializa YAML → FlowDefinition
-├── integration/
-│   ├── IntegrationExecutorFactory     # seleciona executor por IntegrationType
-│   ├── http/HttpIntegrationExecutor   # HTTP com Retry + CircuitBreaker (Resilience4j)
-│   └── queue/
-│       ├── QueueIntegrationExecutor   # delega para Rabbit/Kafka/SQS por provider
-│       ├── RabbitMqPublisher
-│       ├── KafkaPublisher
-│       └── SqsPublisher
-├── manager/
-│   ├── ManagerWorkflowClient          # GET /manager/flows?status=active e .../yaml
-│   ├── ManagerAuthService             # login server-to-server no Manager, JWT em memória
-│   ├── WorkflowCacheService           # @Cacheable("workflows") — carrega do Redis ou Manager
-│   └── WorkflowCacheWarmer            # popula Redis no startup via ApplicationReadyEvent
-├── domain/
-│   ├── model/FlowDefinition           # modelo em memória (não persistido aqui)
-│   └── execution/FlowExecutionContext # contexto acumulado durante a execução
-└── config/
-    ├── RedisCacheConfig               # TTL 1h, Jackson serializer com type info
-    ├── HttpResilienceConfig           # Retry + CircuitBreaker compartilhados
-    ├── KafkaMultiInstanceConfig       # múltiplas instâncias Kafka via orch-integrations
-    └── RabbitMqMultiInstanceConfig    # múltiplas instâncias RabbitMQ via orch-integrations
-```
-
----
-
-## Decisões de design
-
-**Sem persistência própria de workflows.** O orquestrador não tem `spring-boot-starter-data-mongodb`. Workflows são carregados do Manager via HTTP e cacheados no Redis por 1h. `IntegrationType.DATABASE` foi removido.
-
-**Cache de workflows (Redis).** `WorkflowCacheService` é o ponto único de carregamento: tenta o Redis primeiro; em miss, busca o YAML do Manager e deserializa. `WorkflowCacheWarmer` pré-popula na subida. Invalidação é somente por TTL — para forçar, chame `evict(flowId, version)` ou `evictAll()` programaticamente.
-
-**Auth server-to-server com Manager.** `ManagerAuthService` faz login em `POST /api/auth/tokens` do Manager e guarda o JWT em campo volátil. Token é renovado automaticamente quando expirado ou inválido. Credenciais via `orchestrator.manager.username/password`.
-
-**Multi-instância de Kafka e RabbitMQ.** Configuradas via `orch-integrations.kafkas[]` e `orch-integrations.rabbitmqs[]` no `application.yml`, cada uma com um `id`. O campo `id` do passo de integração no YAML do fluxo faz o match.
-
-**Retry + Circuit Breaker em HTTP.** Ordem de aplicação: `Retry(CircuitBreaker(httpCall))`. Status retryable: 500, 429, 408 (configurável). `CallNotPermittedException` não é retentada. Todos os parâmetros ficam em `orch-integrations.retry-configuration` e `orch-integrations.circuit-breaker-configuration`.
-
-**Sem trocar WebClient.** WebFlux WebClient é o único cliente HTTP permitido — não usar RestTemplate.
-
----
-
-## Variáveis de ambiente
-
-| Variável | Padrão | Descrição |
+| Rota | Auth | Onde |
 |---|---|---|
-| `SERVER_PORT` | `8080` | Porta do servidor |
-| `SPRING_PROFILES_ACTIVE` | `` | Use `docker` para rodar no compose |
-| `REDIS_HOST` | `localhost` | Host do Redis |
-| `REDIS_PORT` | `6379` | Porta do Redis |
-| `REDIS_PASSWORD` | `` | Senha do Redis (vazio em dev) |
-| `RABBITMQ_HOST` | `localhost` | Host do RabbitMQ |
-| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Broker Kafka padrão |
-| `KAFKA_BOOTSTRAP_SERVERS_1` | `localhost:9092` | Broker Kafka da instância `kafka-user-tracking` |
-| `MANAGER_URL` | `http://localhost:8082` | Base URL do service-portal-manager |
-| `MANAGER_USERNAME` | `admin` | Credencial para o Manager |
-| `MANAGER_PASSWORD` | `admin` | Credencial para o Manager |
-| `WORKFLOWS_CACHE_TTL_SECONDS` | `3600` | TTL do cache de workflows no Redis |
-| `WORKFLOWS_WARM_UP_ENABLED` | `true` | Pré-carrega Redis na subida |
-| `JWT_SECRET` | (dev secret) | Segredo HS512 — **trocar em produção** |
-| `JWT_EXPIRATION` | `3600` | Expiração do JWT em segundos |
-| `AWS_REGION` | `us-east-1` | Região AWS para SQS |
-| `AWS_SQS_ENDPOINT` | `` | Endpoint customizado (LocalStack: `http://localhost:4566`) |
+| `POST /api/auth/tokens` | público | `security/AuthController` |
+| `POST /api/v1/flows/{flowId}/versions/{version}/executions` | JWT | `controller/OrchestrationController` → `service/OrchestrationService` (sequencial) |
+| `POST /api/v2/flows/{flowId}/versions/{version}/executions` | JWT | mesmo controller → `service/OrchestrationV2Service` (paralelo por `order`, virtual threads) |
+| `DELETE /api/admin/cache/workflows[/{flowId}/versions/{version}]` | JWT | `controller/CacheAdminController` |
+| `/actuator/**`, `/swagger-ui.html`, `/v3/api-docs/**` | público | `security/SecurityConfig` |
 
----
+O controller sempre responde 200 com `OrchestrationResponse`. O resultado vai em `status`: `SUCCESS`, `PARTIAL_SUCCESS` (algum `continueOnError` falhou) ou `FAILED`. Falhas viram `FAILED` dentro do serviço; o `GlobalExceptionHandler` não é alcançado nesse caminho.
 
-## Arquivo de fluxo de exemplo
+## Fluxo de execução
 
-[docs/example-flow.yml](docs/example-flow.yml) — fluxo `create-order-v1` com os 5 tipos de integração suportados: HTTP GET, HTTP POST com `responseMapping`, QUEUE RabbitMQ, QUEUE Kafka, QUEUE SQS.
+1. `manager/WorkflowCacheService.load` lê o Redis; em miss, `ManagerWorkflowClient.fetchYaml` e `service/YamlParserService`.
+2. `service/ContractValidationService.validate` (tipo `FieldType` e regra `ValidationType`).
+3. Integrações em ordem de `order`: `integration/IntegrationExecutorFactory.get(type).execute`.
+4. Validações do fluxo, mesmo mecanismo.
+5. Passo com `continueOnError` grava `{error: msg}` e segue; sem a flag lança `IntegrationExecutionException` e o fluxo vira `FAILED`.
 
-Em dev, `api.exemplo.com` resolve para o container WireMock via alias de rede Docker.
+v2: passos com o mesmo `order` rodam em paralelo; os irmãos terminam antes de a falha ser relançada; grupos e validações seguintes não rodam. Templates `{{contract.x}}`, `{{integrations.id.campo}}`, `{{now()}}` ficam em `service/TemplateResolverService`; valor ausente vira `""` e nunca lança.
 
----
+## Mapa
 
-## Restrições
+Base: `src/main/java/com/orchestrator/`.
 
-- Java 21 LTS, Spring Boot 3.4.5 LTS — não atualizar versões
-- Gradle com Kotlin DSL
-- Sem trocar WebClient por RestTemplate ou similares
-- Parâmetros de retry e circuit breaker devem permanecer externalizados no `application.yml`
-- O orquestrador não deve adquirir dependência direta com banco de dados
+| Caminho | Papel |
+|---|---|
+| `GenericOrchestratorApplication` | Entry point |
+| `service/*` | Execução v1 e v2, contrato, template, parse YAML. `applyMapping` e `build` estão duplicados em v1 e v2 |
+| `integration/IntegrationExecutor` e `integration/IntegrationExecutorFactory` | Interface e seleção por `IntegrationType` (`HTTP`, `QUEUE`) |
+| `integration/http/HttpIntegrationExecutor` | HTTP com retry e circuit breaker; envia `X-Execution-Id` |
+| `integration/queue/*` | `QueueIntegrationExecutor` escolhe publisher por `QueueProvider` (`RABBITMQ`, `KAFKA`, `SQS`) |
+| `manager/*` | Cliente do Manager, login server-to-server (`ManagerAuthService`), cache e warm-up |
+| `domain/model/*`, `domain/execution/*` | Modelo do fluxo YAML, contexto e resultado da execução |
+| `security/*` | JWT stateless e rotas públicas |
+| `config/*` | Redis, resiliência, WebClient, instâncias Kafka/Rabbit/SQS e `config/properties/*` |
+| `exception/*`, `dto/*`, `filter/ExecutionMdcFilter` | Exceções e mapeamento HTTP, DTOs, `executionId` no MDC e no header |
+
+Recursos: `src/main/resources/application.yml`, `application-docker.yml`, `docs/example-flow.yml` (5 tipos de integração), `docs/features/feature_{1,2,3}.md`.
+
+## Quero mudar... onde
+
+| Mudança | Onde |
+|---|---|
+| Regra de validação de campo | `domain/model/ValidationType` e `switch` em `service/ContractValidationService` (sem `default`: não compila sem o `case`) |
+| Tipo de campo | `domain/model/FieldType` e `switch` de tipos no mesmo serviço |
+| Provider de fila | `QueueProvider`, novo `XxxPublisher`, `case` em `QueueIntegrationExecutor`, config em `config/`, `application.yml`, `build.gradle.kts` |
+| Tipo de integração | `IntegrationType`, config em `domain/model`, `IntegrationExecutor` com `@Component` |
+| Retry e circuit breaker | `orch-integrations.retry-configuration` e `circuit-breaker-configuration` no `application.yml`; default em `config/properties/RetryConfigurationProperties` (500, 429, 408) |
+| Semântica de execução | `OrchestrationService` (v1) e `OrchestrationV2Service` (v2). Mude os dois se a regra for comum |
+| Cache | TTL e warm-up em `orchestrator.cache.workflows.*`; invalidar por `CacheAdminController` ou `WorkflowCacheService.evict`/`evictAll` |
+| Auth com o Manager | `manager/ManagerAuthService`, `orchestrator.manager.*` |
+| Rota pública | `security/SecurityConfig` |
+| Instância Kafka ou Rabbit | `orch-integrations.kafkas[]` ou `rabbitmqs[]` (o `id` casa com o passo no YAML) |
+| Campo novo no YAML do fluxo | classe em `domain/model` e `docs/example-flow.yml` |
+
+## Integrações e config
+
+- Manager: `MANAGER_URL`, `MANAGER_USERNAME`, `MANAGER_PASSWORD` (`localhost:8082`, `admin`, `admin`). O Manager também chama de volta `DELETE /api/admin/cache/workflows/{flowId}/versions/{version}` (`OrchestratorCacheClient` do Manager) para invalidar o cache. Rotas usadas: `/api/auth/tokens`, `/manager/flows?status=active`, `/manager/flows/{id}/versions/{v}/yaml`.
+- Redis: `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`. Cache: `WORKFLOWS_CACHE_TTL_SECONDS` (3600), `WORKFLOWS_WARM_UP_ENABLED` (true).
+- JWT: `JWT_SECRET` (trocar em produção), `JWT_EXPIRATION`. SBA: `SPRING_BOOT_ADMIN_URL`. Tracing: `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- Demais variáveis (Rabbit, Kafka, SQS, timeouts HTTP): `src/main/resources/application.yml`. Infra local: `docker-compose.yml`; stack completa: `../docker-compose-service-portal.yml`.
+
+## Comandos
+
+```bash
+docker compose up -d && ./gradlew bootRun   # infra local e app
+./gradlew test                              # unitários; IT em src/test/java/com/orchestrator/it
+./gradlew jacocoTestCoverageVerification    # gate >= 95% (classes listadas em build.gradle.kts)
+./gradlew spotlessApply                     # obrigatório antes de commit
+```
+
+## Armadilhas
+
+- Sem RestTemplate, sem banco, sem atualizar Java 21 ou Spring Boot 3.4.5. Retry e circuit breaker ficam externalizados.
+- Virtual threads não herdam MDC nem contexto OTel: código paralelo novo precisa copiar os dois (`OrchestrationV2Service.executeGroupParallel`).
+- Circuito aberto (`CallNotPermittedException`) não é retentado.
+- Testcontainers 1.20.x com Docker Engine 29 ou mais novo falha ao iniciar o cliente Docker. O `build.gradle.kts` fixa `api.version=1.44` nos testes; ao subir a versão do Testcontainers, reavalie.
+- Todo `.java` precisa do header de licença, senão o Spotless falha.
+- O gate JaCoCo cobre `HttpIntegrationExecutor`, `manager/**`, config de Redis, resiliência e Manager, e `CacheAdminController`: mude essas classes com teste.

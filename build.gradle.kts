@@ -90,7 +90,7 @@ dependencies {
 
 spotless {
     java {
-        licenseHeaderFile(file("${projectDir}/../license-header.txt"))
+        licenseHeaderFile(file("${projectDir}/license-header.txt"))
         googleJavaFormat().aosp()
         targetExclude("**/build/**", "**/generated/**")
     }
@@ -99,6 +99,8 @@ spotless {
 tasks.withType<Test> {
     useJUnitPlatform()
     testLogging { events("passed", "skipped", "failed") }
+    // Docker Engine 29+ recusa a API 1.32 que o docker-java do Testcontainers 1.20.x usa por padrão.
+    systemProperty("api.version", "1.44")
 }
 
 tasks.named<BootJar>("bootJar") {
