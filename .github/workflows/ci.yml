@@ -14,9 +14,9 @@ concurrency:
 
 jobs:
   build:
-    name: build e testes
+    name: build e Spotless
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -27,18 +27,147 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - name: Build, Spotless, testes e gate JaCoCo
+      - name: Compilar, empacotar e Spotless
         run: |
           chmod +x ./gradlew
-          ./gradlew build jacocoTestCoverageVerification --no-daemon
+          ./gradlew assemble testClasses spotlessCheck --no-daemon
+
+      # Os jobs de teste reutilizam estas classes (sem recompilar).
+      - name: Publicar classes compiladas
+        uses: actions/upload-artifact@v7
+        with:
+          name: classes
+          path: |
+            build/classes
+            build/resources
+          retention-days: 1
+
+  docker-build:
+    name: imagem Docker (sem push)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  unit-tests:
+    name: testes unitários
+    needs: [build, docker-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: classes
+          path: build
+
+      - name: Testes unitários
+        run: |
+          chmod +x ./gradlew
+          ./gradlew test -x compileJava -x processResources -x compileTestJava -x processTestResources --no-daemon
+
+      - name: Publicar dados de cobertura
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco-unit
+          path: build/jacoco/test.exec
+          retention-days: 1
 
       - name: Relatórios de teste (em caso de falha)
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: test-reports
+          name: test-reports-unit
           path: build/reports/tests
           if-no-files-found: ignore
+
+  integration-tests:
+    name: testes de integração
+    needs: [build, docker-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: classes
+          path: build
+
+      - name: Testes de integração (Testcontainers)
+        run: |
+          chmod +x ./gradlew
+          ./gradlew integrationTest -x compileJava -x processResources -x compileTestJava -x processTestResources --no-daemon
+
+      - name: Publicar dados de cobertura
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco-integration
+          path: build/jacoco/integrationTest.exec
+          retention-days: 1
+
+      - name: Relatórios de teste (em caso de falha)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports-integration
+          path: build/reports/tests
+          if-no-files-found: ignore
+
+  coverage:
+    name: gate de cobertura JaCoCo
+    needs: [unit-tests, integration-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: classes
+          path: build
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: jacoco-*
+          merge-multiple: true
+          path: build/jacoco
+
+      - name: Gate JaCoCo (>= 95%) sobre o exec unificado
+        run: |
+          chmod +x ./gradlew
+          ./gradlew jacocoTestCoverageVerification -x test -x integrationTest -x compileJava -x processResources --no-daemon
 
   agents-index:
     name: índice AGENTS.md
@@ -51,7 +180,7 @@ jobs:
 
   open-pr:
     name: abrir PR para main
-    needs: [build, agents-index]
+    needs: [coverage, agents-index]
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/feature/')
     runs-on: ubuntu-latest
     timeout-minutes: 5
