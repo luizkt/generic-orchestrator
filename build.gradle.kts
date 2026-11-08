@@ -25,7 +25,7 @@ repositories { mavenCentral() }
 
 extra["awsSdkVersion"] = "2.57.11"
 extra["jjwtVersion"] = "0.13.0"
-extra["testcontainersVersion"] = "1.20.4"
+extra["testcontainersVersion"] = "1.21.4"
 extra["resilience4jVersion"] = "2.4.0"
 extra["sbaVersion"] = "3.4.7"
 
