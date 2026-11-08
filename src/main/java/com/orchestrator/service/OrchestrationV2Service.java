@@ -38,7 +38,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -68,20 +67,8 @@ public class OrchestrationV2Service {
     private final IntegrationExecutorFactory executorFactory;
 
     public FlowExecutionResult execute(String version, String flowId, Map<String, Object> payload) {
-        String executionId = MDC.get("executionId");
-        if (executionId == null) {
-            executionId = UUID.randomUUID().toString();
-            MDC.put("executionId", executionId);
-        }
-        MDC.put("flowId", flowId);
-        MDC.put("version", version);
-
-        FlowExecutionContext ctx = new FlowExecutionContext();
-        ctx.setExecutionId(executionId);
-        ctx.setFlowId(flowId);
-        ctx.setStartedAt(LocalDateTime.now());
-        ctx.setStatus(ExecutionStatus.RUNNING);
-        ctx.setContract(payload != null ? payload : Map.of());
+        FlowExecutionContext ctx = ExecutionSupport.begin(version, flowId, payload);
+        String executionId = ctx.getExecutionId();
 
         log.info(
                 "[v2] Starting execution [{}] of flow: {} version: {}",
@@ -107,10 +94,7 @@ public class OrchestrationV2Service {
 
         } catch (Exception e) {
             log.error("[v2] Error in execution [{}]: {}", ctx.getExecutionId(), e.getMessage(), e);
-            ctx.setStatus(ExecutionStatus.FAILED);
-            ctx.setErrorMessage(e.getMessage());
-            ctx.setFinishedAt(LocalDateTime.now());
-            return ResultMapper.build(ctx, e.getMessage());
+            return ExecutionSupport.fail(ctx, e);
         }
     }
 
