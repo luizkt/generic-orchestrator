@@ -34,7 +34,10 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** Garante que o HEALTHCHECK do Dockerfile (liveness anônimo) convive com a cadeia de actuator protegida. */
+/**
+ * Garante que o HEALTHCHECK do Dockerfile (liveness anônimo) convive com a cadeia de actuator
+ * protegida.
+ */
 @AutoConfigureObservability
 @AutoConfigureMockMvc
 @TestPropertySource(
