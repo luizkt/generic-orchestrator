@@ -25,7 +25,9 @@ Stack: Java 21, Spring Boot 3.4.5 (não atualizar), Gradle Kotlin DSL, WebClient
 | `POST /api/v1/flows/{flowId}/versions/{version}/executions` | JWT | `controller/OrchestrationController` → `service/OrchestrationService` (sequencial) |
 | `POST /api/v2/flows/{flowId}/versions/{version}/executions` | JWT | mesmo controller → `service/OrchestrationV2Service` (paralelo por `order`, virtual threads) |
 | `DELETE /api/admin/cache/workflows[/{flowId}/versions/{version}]` | JWT | `controller/CacheAdminController` |
-| `/actuator/**`, `/swagger-ui.html`, `/v3/api-docs/**` | público | `security/SecurityConfig` |
+| `/actuator/health/**`, `/actuator/info`, `/actuator/prometheus` | público | `security/ActuatorSecurityConfig` |
+| restante de `/actuator/**` (env, loggers, threaddump, metrics, caches, beans) | Basic, role `ACTUATOR` | `security/ActuatorSecurityConfig` |
+| `/swagger-ui.html`, `/v3/api-docs/**` | público | `security/SecurityConfig` |
 
 O controller sempre responde 200 com `OrchestrationResponse`. O resultado vai em `status`: `SUCCESS`, `PARTIAL_SUCCESS` (algum `continueOnError` falhou) ou `FAILED`. Falhas viram `FAILED` dentro do serviço; o `GlobalExceptionHandler` não é alcançado nesse caminho.
 
