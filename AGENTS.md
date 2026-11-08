@@ -13,7 +13,7 @@ atualizado-em: 2026-11-07
 
 Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e filas), roda validações, devolve resultado consolidado. Não persiste nada e não faz CRUD de workflows (isso é do `service-portal-manager`): busca o YAML no Manager e cacheia no Redis (TTL 1h).
 
-<!-- gen:size -->Tamanho: 67 arquivos .java em `src/main`, 31 em `src/test`.<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 67 arquivos .java em `src/main`, 32 em `src/test`.<!-- /gen:size -->
 
 Stack: Java 21, Spring Boot 3.4.5 (não atualizar), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
@@ -85,7 +85,7 @@ Recursos: `src/main/resources/application.yml`, `application-docker.yml`, `docs/
 - Redis: `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`. Cache: `WORKFLOWS_CACHE_TTL_SECONDS` (3600), `WORKFLOWS_WARM_UP_ENABLED` (true).
 - JWT: `JWT_SECRET` (sem valor na imagem; o default de dev do `application.yml` é sinalizado pelo guard), `JWT_EXPIRATION`. Login da API (`/api/auth/tokens`): `ADMIN_USERNAME`/`ADMIN_PASSWORD` (default `admin`/`admin`, só dev; comparação em tempo constante).
 - Actuator: públicos `/actuator/health/**`, `/actuator/info`, `/actuator/prometheus`. O resto (`env`, `loggers`, `threaddump`, `metrics`, `caches`, `beans`) exige HTTP Basic do usuário com role `ACTUATOR`: `ACTUATOR_USERNAME` (default `actuator`) e `ACTUATOR_PASSWORD` (SEM default: vazio = usuário inexistente = 401 sempre). `heapdump` não é exposto. `health` mostra detalhes só `when-authorized`. O SBA lê esses endpoints pelas metadata `spring.boot.admin.client.instance.metadata.user.name` e `.password`, preenchidas com as mesmas variáveis.
-- Guard de segredos: `SECURITY_STRICT=true` ou profile `prod` faz o startup falhar se `JWT_SECRET` (`CHANGE_ME...`), `ADMIN_*` (`admin`/`admin`) ou `MANAGER_PASSWORD=admin` estiverem nos defaults; nos demais perfis só loga WARN com os nomes (nunca os valores). SBA: `SPRING_BOOT_ADMIN_URL`. Tracing: `OTEL_EXPORTER_OTLP_ENDPOINT`.
+- Guard de segredos: `SECURITY_STRICT=true` ou profile `prod` faz o startup falhar se `JWT_SECRET` (`CHANGE_ME...`), `ADMIN_*` (`admin`/`admin`) ou `MANAGER_PASSWORD=admin` estiverem nos defaults; nos demais perfis só loga WARN com os nomes (nunca os valores). SBA: `SPRING_BOOT_ADMIN_URL`. Tracing: `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACING_SAMPLING_PROBABILITY` (1.0; baixe em produção). Log da aplicação: `LOG_LEVEL_APP` (DEBUG; use INFO em produção).
 - Demais variáveis (Rabbit, Kafka, SQS, timeouts HTTP): `src/main/resources/application.yml`. Infra local: `docker-compose.yml`; stack completa: `../docker-compose-service-portal.yml`.
 
 ## Comandos

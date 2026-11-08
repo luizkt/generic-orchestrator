@@ -78,7 +78,7 @@ management:
         enabled: true
   tracing:
     sampling:
-      probability: 1.0
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
   otlp:
     tracing:
       endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
@@ -138,4 +138,4 @@ orch-integrations:
 
 logging:
   level:
-    com.orchestrator: DEBUG
+    com.orchestrator: ${LOG_LEVEL_APP:DEBUG}
