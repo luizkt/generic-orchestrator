@@ -4,3 +4,8 @@ build
 .idea
 *.md
 docs
+.github
+.claude
+.githooks
+.gitignore
+docker-compose*.yml

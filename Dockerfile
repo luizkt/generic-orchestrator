@@ -1,8 +1,14 @@
 # syntax=docker/dockerfile:1
 # ─── Build ────────────────────────────────────────────────────────────────────
-FROM gradle:8.10-jdk21-alpine AS build
+FROM gradle:8.14-jdk21-alpine AS build
 WORKDIR /app
-COPY . .
+# Camada de dependências: só muda quando os arquivos de build mudam
+COPY gradlew settings.gradle.kts build.gradle.kts license-header.txt ./
+COPY gradle ./gradle
+RUN --mount=type=cache,target=/root/.gradle \
+    gradle dependencies --no-daemon > /dev/null
+# Código-fonte: mudanças aqui não invalidam a camada acima
+COPY src ./src
 RUN --mount=type=cache,target=/root/.gradle \
     gradle bootJar --no-daemon -x test
 
@@ -10,9 +16,11 @@ RUN --mount=type=cache,target=/root/.gradle \
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl \
+    && addgroup -S app && adduser -S -G app app \
+    && chown app:app /app
 
-COPY --from=build /app/build/libs/generic-orchestrator.jar app.jar
+COPY --from=build --chown=app:app /app/build/libs/generic-orchestrator.jar app.jar
 
 # ── Infraestrutura ─────────────────────────────────────────────────────────────
 # MongoDB foi removido — workflows não fazem mais operações em bancos arbitrários
@@ -55,5 +63,11 @@ ENV SERVER_PORT=8080 \
     JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
 
 EXPOSE 8080
+
+# Liveness não depende de Rabbit/Kafka/Manager (o /actuator/health geral devolve 503 sem eles)
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
+    CMD curl -fsS http://localhost:${SERVER_PORT:-8080}/actuator/health/liveness || exit 1
+
+USER app
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
