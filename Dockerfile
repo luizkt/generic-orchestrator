@@ -27,30 +27,25 @@ COPY --from=build --chown=app:app /app/build/libs/generic-orchestrator.jar app.j
 # durante a execução. Persistência acontece via integrações HTTP/QUEUE downstream.
 ENV REDIS_HOST=localhost \
     REDIS_PORT=6379 \
-    REDIS_PASSWORD="" \
     REDIS_TIMEOUT_MS=2000 \
     RABBITMQ_HOST=localhost \
     RABBITMQ_PORT=5672 \
     RABBITMQ_USERNAME=guest \
-    RABBITMQ_PASSWORD=guest \
     KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
     KAFKA_BOOTSTRAP_SERVERS_1=localhost:9092 \
     AWS_REGION=us-east-1 \
-    AWS_SQS_ENDPOINT="" \
-    AWS_ACCESS_KEY_ID="" \
-    AWS_SECRET_ACCESS_KEY=""
+    AWS_SQS_ENDPOINT=""
 
 # ── Service Portal Manager (consulta de workflows) ────────────────────────────
 ENV MANAGER_URL=http://localhost:8082 \
     MANAGER_USERNAME=admin \
-    MANAGER_PASSWORD=admin \
     MANAGER_TIMEOUT_MS=5000 \
     WORKFLOWS_CACHE_TTL_SECONDS=3600 \
     WORKFLOWS_WARM_UP_ENABLED=true
 
 # ── Segurança ──────────────────────────────────────────────────────────────────
-ENV JWT_SECRET=CHANGE_ME_PLEASE_THIS_IS_A_DEV_ONLY_SECRET_AT_LEAST_64_CHARS_LONG_FOR_HS512 \
-    JWT_EXPIRATION=3600 \
+# Segredos (JWT_SECRET, ADMIN_*, MANAGER_PASSWORD, ACTUATOR_PASSWORD, REDIS/RABBITMQ/AWS) NAO ficam na imagem: injete em runtime.
+ENV JWT_EXPIRATION=3600 \
     JWT_ISSUER=generic-orchestrator
 
 # ── HTTP client ────────────────────────────────────────────────────────────────

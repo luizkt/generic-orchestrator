@@ -26,7 +26,10 @@ package com.orchestrator.security;
 import com.orchestrator.dto.LoginRequest;
 import com.orchestrator.dto.LoginResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -42,14 +45,30 @@ public class AuthController {
 
     private final JwtService jwtService;
 
+    @Value("${orchestrator.security.admin.username:admin}")
+    private String adminUsername;
+
+    @Value("${orchestrator.security.admin.password:admin}")
+    private String adminPassword;
+
     @PostMapping("/tokens")
     public ResponseEntity<LoginResponse> createToken(@RequestBody LoginRequest request) {
-        // Simplified authentication for demonstration purposes.
+        // Single configured credential; the defaults are flagged by SecurityDefaultsGuard.
         // Production: integrate with user store + BCrypt.
-        if (!"admin".equals(request.getUsername()) || !"admin".equals(request.getPassword())) {
+        boolean userOk = constantTimeEquals(adminUsername, request.getUsername());
+        boolean passOk = constantTimeEquals(adminPassword, request.getPassword());
+        if (!(userOk & passOk)) {
             return ResponseEntity.status(401).build();
         }
         String token = jwtService.generateToken(request.getUsername());
         return ResponseEntity.status(201).body(new LoginResponse(token, "Bearer"));
+    }
+
+    private static boolean constantTimeEquals(String expected, String actual) {
+        if (actual == null) {
+            return false;
+        }
+        return MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
     }
 }
