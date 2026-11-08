@@ -103,6 +103,22 @@ tasks.withType<Test> {
     systemProperty("api.version", "1.44")
 }
 
+// `test` roda só os unitários; os `*IT` (Testcontainers, precisam de Docker) ficam em `integrationTest`.
+tasks.named<Test>("test") {
+    exclude("**/it/**")
+}
+
+val integrationTest by tasks.registering(Test::class) {
+    description = "Testes de integração (Testcontainers) em com.orchestrator.it."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    include("**/it/**")
+    shouldRunAfter(tasks.named("test"))
+}
+
+tasks.named("check") { dependsOn(integrationTest) }
+
 tasks.named<BootJar>("bootJar") {
     archiveFileName.set("generic-orchestrator.jar")
 }
@@ -126,7 +142,8 @@ val coverageIncludes = listOf(
 )
 
 tasks.named<JacocoReport>("jacocoTestReport") {
-    dependsOn(tasks.named("test"))
+    dependsOn(tasks.named("test"), integrationTest)
+    executionData.setFrom(fileTree(layout.buildDirectory.dir("jacoco")) { include("*.exec") })
     classDirectories.setFrom(
         files(classDirectories.files.map {
             fileTree(it) { include(coverageIncludes) }
@@ -139,7 +156,9 @@ tasks.named<JacocoReport>("jacocoTestReport") {
 }
 
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
-    dependsOn(tasks.named("test"))
+    dependsOn(tasks.named("test"), integrationTest)
+    // Junta o exec de todos os testes (no CI, os de jobs paralelos chegam por artifact).
+    executionData.setFrom(fileTree(layout.buildDirectory.dir("jacoco")) { include("*.exec") })
     classDirectories.setFrom(
         files(classDirectories.files.map {
             fileTree(it) { include(coverageIncludes) }
