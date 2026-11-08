@@ -3,7 +3,7 @@ import org.springframework.boot.gradle.tasks.bundling.BootJar
 plugins {
     java
     jacoco
-    id("org.springframework.boot") version "4.0.9"
+    id("org.springframework.boot") version "4.1.2"
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "8.11.0"
 }
@@ -26,7 +26,7 @@ repositories { mavenCentral() }
 extra["awsSdkVersion"] = "2.57.11"
 extra["jjwtVersion"] = "0.13.0"
 extra["resilience4jVersion"] = "2.4.0"
-extra["sbaVersion"] = "4.0.4"
+extra["sbaVersion"] = "4.1.5"
 
 dependencies {
     implementation("de.codecentric:spring-boot-admin-starter-client:${property("sbaVersion")}")
@@ -64,7 +64,7 @@ dependencies {
     implementation("tools.jackson.dataformat:jackson-dataformat-yaml")
 
     // Swagger / OpenAPI
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0")
 
     // Lombok
     compileOnly("org.projectlombok:lombok")
