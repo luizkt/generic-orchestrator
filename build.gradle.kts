@@ -138,7 +138,20 @@ val coverageIncludes = listOf(
     "com/orchestrator/config/ManagerWebClientConfig.class",
     "com/orchestrator/config/properties/ManagerProperties.class",
     // Endpoint admin de invalidação de cache (cross-service)
-    "com/orchestrator/controller/CacheAdminController.class"
+    "com/orchestrator/controller/CacheAdminController.class",
+    // Serviços de domínio (validação de contrato, templates, YAML)
+    "com/orchestrator/service/ContractValidationService.class",
+    "com/orchestrator/service/TemplateResolverService.class",
+    "com/orchestrator/service/YamlParserService.class",
+    // Filas (publishers + executor) e configs de cliente
+    "com/orchestrator/integration/queue/**",
+    "com/orchestrator/config/SqsConfig.class",
+    "com/orchestrator/config/KafkaMultiInstanceConfig.class",
+    "com/orchestrator/config/RabbitMqMultiInstanceConfig.class",
+    // JWT, filtro de MDC e tratamento global de erros
+    "com/orchestrator/security/JwtService.class",
+    "com/orchestrator/filter/ExecutionMdcFilter.class",
+    "com/orchestrator/exception/**"
 )
 
 tasks.named<JacocoReport>("jacocoTestReport") {

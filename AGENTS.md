@@ -13,7 +13,7 @@ atualizado-em: 2026-11-07
 
 Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e filas), roda validações, devolve resultado consolidado. Não persiste nada e não faz CRUD de workflows (isso é do `service-portal-manager`): busca o YAML no Manager e cacheia no Redis (TTL 1h).
 
-<!-- gen:size -->Tamanho: 65 arquivos .java em `src/main`, 19 em `src/test`.<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 65 arquivos .java em `src/main`, 28 em `src/test`.<!-- /gen:size -->
 
 Stack: Java 21, Spring Boot 3.4.5 (não atualizar), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
@@ -104,4 +104,4 @@ docker compose up -d && ./gradlew bootRun   # infra local e app
 - `HEALTHCHECK` da imagem usa `/actuator/health/liveness` (`management.endpoint.health.probes.enabled=true`), independente de Redis/Rabbit/Kafka/Manager; o `/actuator/health` geral devolve 503 sem essas dependências.
 - Ordem das camadas do Dockerfile: `gradlew`/`gradle`/`*.kts` -> `gradle dependencies` -> `COPY src` -> `bootJar`. Não volte a `COPY . .` antes das dependências, senão todo commit invalida o cache.
 - Só unitários dão 0,91 de cobertura: o gate precisa do `integrationTest` também. No CI são jobs paralelos (`.github/workflows/ci.yml`) e o job `coverage` junta os `.exec` por artifact, reusando as classes do job `build` (`-x compileJava ...`).
-- O gate JaCoCo cobre `HttpIntegrationExecutor`, `manager/**`, config de Redis, resiliência e Manager, e `CacheAdminController`: mude essas classes com teste.
+- O gate JaCoCo (>= 95% INSTRUCTION, lista `coverageIncludes` em `build.gradle.kts`) cobre `HttpIntegrationExecutor`, `manager/**`, config de Redis, resiliência e Manager, `CacheAdminController`, `ContractValidationService`, `TemplateResolverService`, `YamlParserService`, `integration/queue/**`, `SqsConfig`, `KafkaMultiInstanceConfig` e `RabbitMqMultiInstanceConfig`, `JwtService`, `ExecutionMdcFilter` e `exception/**`: mude essas classes com teste. Seguem fora do gate (inclua ao cobrir): `WebClientConfig` (68%), `OrchestrationController` (80%), `JwtAuthenticationFilter` (90%), `OrchestrationService` (90%), `OrchestrationV2Service` (91%), `GenericOrchestratorApplication` (38%). Novas classes só entram no gate se >= 95% após o merge unit+IT.
