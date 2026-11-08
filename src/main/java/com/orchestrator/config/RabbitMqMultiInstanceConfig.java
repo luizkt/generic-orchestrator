@@ -30,7 +30,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -42,7 +42,7 @@ public class RabbitMqMultiInstanceConfig {
 
     @Bean
     public Map<String, RabbitTemplate> rabbitTemplates() {
-        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter();
+        JacksonJsonMessageConverter converter = new JacksonJsonMessageConverter();
         Map<String, RabbitTemplate> templates = new HashMap<>();
         for (RabbitMqIntegrationProperties cfg : properties.getRabbitmqs()) {
             CachingConnectionFactory cf = new CachingConnectionFactory();

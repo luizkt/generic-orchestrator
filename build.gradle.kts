@@ -3,7 +3,7 @@ import org.springframework.boot.gradle.tasks.bundling.BootJar
 plugins {
     java
     jacoco
-    id("org.springframework.boot") version "3.5.16"
+    id("org.springframework.boot") version "4.0.9"
     id("io.spring.dependency-management") version "1.1.7"
     id("com.diffplug.spotless") version "8.11.0"
 }
@@ -25,22 +25,22 @@ repositories { mavenCentral() }
 
 extra["awsSdkVersion"] = "2.57.11"
 extra["jjwtVersion"] = "0.13.0"
-extra["testcontainersVersion"] = "1.21.4"
 extra["resilience4jVersion"] = "2.4.0"
-extra["sbaVersion"] = "3.5.11"
+extra["sbaVersion"] = "4.0.4"
 
 dependencies {
     implementation("de.codecentric:spring-boot-admin-starter-client:${property("sbaVersion")}")
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
     implementation("io.opentelemetry:opentelemetry-exporter-otlp")
     runtimeOnly("io.micrometer:micrometer-registry-prometheus")
-    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-cache")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-amqp")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-webflux")
+    implementation("org.springframework.boot:spring-boot-starter-webclient")
     implementation("org.springframework.boot:spring-boot-starter-security")
 
     // Resilience4j (retry + circuit breaker para integrações HTTP)
@@ -48,7 +48,7 @@ dependencies {
     implementation("io.github.resilience4j:resilience4j-circuitbreaker:${property("resilience4jVersion")}")
 
     // Kafka
-    implementation("org.springframework.kafka:spring-kafka")
+    implementation("org.springframework.boot:spring-boot-starter-kafka")
 
     // AWS SQS
     implementation("software.amazon.awssdk:sqs:${property("awsSdkVersion")}")
@@ -57,13 +57,14 @@ dependencies {
     implementation("io.jsonwebtoken:jjwt-api:${property("jjwtVersion")}")
     runtimeOnly("io.jsonwebtoken:jjwt-impl:${property("jjwtVersion")}")
     runtimeOnly("io.jsonwebtoken:jjwt-jackson:${property("jjwtVersion")}")
+    // jjwt-jackson 0.13 ainda usa Jackson 2 (pacote com.fasterxml); coexiste com o Jackson 3 do Boot 4
+    runtimeOnly("com.fasterxml.jackson.core:jackson-databind")
 
     // Jackson YAML
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml")
-    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
+    implementation("tools.jackson.dataformat:jackson-dataformat-yaml")
 
     // Swagger / OpenAPI
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.10.0")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3")
 
     // Lombok
     compileOnly("org.projectlombok:lombok")
@@ -71,6 +72,9 @@ dependencies {
 
     // Testes
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-security-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-micrometer-metrics-test")
     testImplementation("org.springframework.security:spring-security-test")
     testImplementation("org.springframework.kafka:spring-kafka-test")
     testImplementation("org.springframework.amqp:spring-rabbit-test")
@@ -78,11 +82,11 @@ dependencies {
     testImplementation("org.mockito:mockito-core")
     testImplementation("org.mockito:mockito-junit-jupiter")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
-    testImplementation("org.testcontainers:testcontainers:${property("testcontainersVersion")}")
-    testImplementation("org.testcontainers:junit-jupiter:${property("testcontainersVersion")}")
-    testImplementation("org.testcontainers:rabbitmq:${property("testcontainersVersion")}")
-    testImplementation("org.testcontainers:kafka:${property("testcontainersVersion")}")
-    testImplementation("org.testcontainers:localstack:${property("testcontainersVersion")}")
+    testImplementation("org.testcontainers:testcontainers")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter")
+    testImplementation("org.testcontainers:testcontainers-rabbitmq")
+    testImplementation("org.testcontainers:testcontainers-kafka")
+    testImplementation("org.testcontainers:testcontainers-localstack")
     testImplementation("software.amazon.awssdk:sqs:${property("awsSdkVersion")}")
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -186,3 +190,11 @@ tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
         }
     }
 }
+
+// O Boot 4 gerencia o OkHttp 5, mas o MockWebServer dos testes é o 4.12 e usa okhttp3.internal.
+// Só os classpaths de teste voltam ao OkHttp 4; a aplicação continua com a versão gerenciada.
+configurations
+    .matching { it.name == "testCompileClasspath" || it.name == "testRuntimeClasspath" }
+    .configureEach {
+        resolutionStrategy.force("com.squareup.okhttp3:okhttp:4.12.0")
+    }

@@ -29,7 +29,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orchestrator.config.HttpResilienceConfig;
 import com.orchestrator.config.properties.CircuitBreakerConfigurationProperties;
 import com.orchestrator.config.properties.OrchIntegrationsProperties;
@@ -53,6 +52,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.reactive.function.client.WebClient;
+import tools.jackson.databind.ObjectMapper;
 
 /** Garante que os listeners de Retry/CircuitBreaker são registrados uma única vez por instância. */
 class HttpResilienceListenersTest {

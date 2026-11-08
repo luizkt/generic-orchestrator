@@ -23,14 +23,14 @@
  */
 package com.orchestrator.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.orchestrator.domain.model.FlowDefinition;
 import com.orchestrator.exception.InvalidFlowDefinitionException;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.dataformat.yaml.YAMLMapper;
 
 @Slf4j
 @Service
@@ -40,8 +40,8 @@ public class YamlParserService {
     private final ObjectMapper jsonMapper;
 
     public YamlParserService() {
-        this.yamlMapper = new ObjectMapper(new YAMLFactory()).registerModule(new JavaTimeModule());
-        this.jsonMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        this.yamlMapper = YAMLMapper.builder().build();
+        this.jsonMapper = JsonMapper.builder().build();
     }
 
     @SuppressWarnings("unchecked")

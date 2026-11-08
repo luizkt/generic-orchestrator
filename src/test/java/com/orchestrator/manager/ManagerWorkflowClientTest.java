@@ -81,8 +81,8 @@ class ManagerWorkflowClientTest {
                         .setResponseCode(200)
                         .setHeader("Content-Type", "application/json")
                         .setBody(
-                                "[{\"flowId\":\"a\",\"versao\":\"1.0\",\"ativo\":true},"
-                                        + "{\"flowId\":\"b\",\"versao\":\"2.0\",\"ativo\":true}]"));
+                                "[{\"flowId\":\"a\",\"version\":\"1.0\",\"active\":true},"
+                                        + "{\"flowId\":\"b\",\"version\":\"2.0\",\"active\":true}]"));
 
         var ativos = client.listActive();
         assertThat(ativos).hasSize(2);
