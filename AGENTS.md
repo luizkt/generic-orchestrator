@@ -15,7 +15,7 @@ Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e fi
 
 <!-- gen:size -->Tamanho: 67 arquivos .java em `src/main`, 32 em `src/test`.<!-- /gen:size -->
 
-Stack: Java 21, Spring Boot 3.4.5 (não atualizar), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
+Stack: Java 21, Spring Boot 3.4.13 (em migração para 4.1.x, ver `../docs/plans/PLAN-spring-boot-upgrade.md`; suba uma linha por vez), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
 ## Endpoints
 
@@ -103,7 +103,7 @@ docker compose up -d && ./gradlew bootRun   # infra local e app
 - Segredos nunca em `ENV` do Dockerfile: injete em runtime (compose/secret). Rota nova de actuator fora de health, info e prometheus fica protegida por padrão; não volte a liberar `/actuator/**` nem exponha `heapdump` (contém o `JWT_SECRET`).
 - O `JwtAuthenticationFilter` fica só na chain da API (registro de servlet desligado em `SecurityConfig`); um Bearer não abre o actuator.
 - Testes que leem `/actuator/prometheus` com MockMvc precisam de `@AutoConfigureObservability` (o `@SpringBootTest` desliga o export de métricas).
-- Sem RestTemplate, sem banco, sem atualizar Java 21 ou Spring Boot 3.4.5. Retry e circuit breaker ficam externalizados.
+- Sem RestTemplate, sem banco, sem atualizar Java 21. O Spring Boot sobe só pelos marcos do plano de upgrade. Retry e circuit breaker ficam externalizados.
 - Virtual threads não herdam MDC nem contexto OTel: código paralelo novo precisa copiar os dois (`OrchestrationV2Service.executeGroupParallel`).
 - Circuito aberto (`CallNotPermittedException`) não é retentado.
 - Os registries de Retry e CircuitBreaker devolvem instâncias singleton por integração: listeners de eventos entram uma vez, em `config/HttpResilienceConfig` (`onEntryAdded`), nunca a cada execução em `HttpIntegrationExecutor` (acumulava consumers e duplicava logs).
