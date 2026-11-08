@@ -103,14 +103,14 @@ public class OrchestrationV2Service {
             ctx.setStatus(
                     hadError.get() ? ExecutionStatus.PARTIAL_SUCCESS : ExecutionStatus.SUCCESS);
             ctx.setFinishedAt(LocalDateTime.now());
-            return build(ctx, null);
+            return ResultMapper.build(ctx, null);
 
         } catch (Exception e) {
             log.error("[v2] Error in execution [{}]: {}", ctx.getExecutionId(), e.getMessage(), e);
             ctx.setStatus(ExecutionStatus.FAILED);
             ctx.setErrorMessage(e.getMessage());
             ctx.setFinishedAt(LocalDateTime.now());
-            return build(ctx, e.getMessage());
+            return ResultMapper.build(ctx, e.getMessage());
         }
     }
 
@@ -199,7 +199,7 @@ public class OrchestrationV2Service {
             String stepType) {
         try {
             Object result = executorFactory.get(i.getType()).execute(i, ctx);
-            resultStore.accept(i.getId(), applyMapping(i, result));
+            resultStore.accept(i.getId(), ResultMapper.applyMapping(i, result));
             log.info("[v2] {} '{}' OK", stepType, i.getId());
         } catch (Exception e) {
             if (i.isContinueOnError()) {
@@ -215,35 +215,5 @@ public class OrchestrationV2Service {
                         "Required " + stepType + " failed: " + i.getId(), e);
             }
         }
-    }
-
-    private FlowExecutionResult build(FlowExecutionContext ctx, String error) {
-        return FlowExecutionResult.builder()
-                .executionId(ctx.getExecutionId())
-                .flowId(ctx.getFlowId())
-                .status(ctx.getStatus())
-                .result(ctx.getIntegrations())
-                .validations(ctx.getValidations())
-                .errorMessage(error)
-                .startedAt(ctx.getStartedAt())
-                .finishedAt(ctx.getFinishedAt())
-                .build();
-    }
-
-    @SuppressWarnings("unchecked")
-    private Object applyMapping(IntegrationDefinition i, Object result) {
-        var mapping =
-                switch (i.getType()) {
-                    case HTTP -> i.getHttp() != null ? i.getHttp().getResponseMapping() : null;
-                    default -> null;
-                };
-        if (mapping == null || mapping.getSourceField() == null) return result;
-        if (result instanceof Map<?, ?> m) {
-            Object v = ((Map<String, Object>) m).get(mapping.getSourceField());
-            return Map.of(
-                    mapping.getTargetField() != null ? mapping.getTargetField() : "value",
-                    v != null ? v : "");
-        }
-        return result;
     }
 }

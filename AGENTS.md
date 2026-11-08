@@ -13,7 +13,7 @@ atualizado-em: 2026-11-07
 
 Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e filas), roda validações, devolve resultado consolidado. Não persiste nada e não faz CRUD de workflows (isso é do `service-portal-manager`): busca o YAML no Manager e cacheia no Redis (TTL 1h).
 
-<!-- gen:size -->Tamanho: 64 arquivos .java em `src/main`, 17 em `src/test`.<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 65 arquivos .java em `src/main`, 19 em `src/test`.<!-- /gen:size -->
 
 Stack: Java 21, Spring Boot 3.4.5 (não atualizar), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
@@ -46,7 +46,7 @@ Base: `src/main/java/com/orchestrator/`.
 | Caminho | Papel |
 |---|---|
 | `GenericOrchestratorApplication` | Entry point |
-| `service/*` | Execução v1 e v2, contrato, template, parse YAML. `applyMapping` e `build` estão duplicados em v1 e v2 |
+| `service/*` | Execução v1 e v2, contrato, template, parse YAML. `service/ResultMapper` (`applyMapping`, `build`) é compartilhado por v1 e v2 |
 | `integration/IntegrationExecutor` e `integration/IntegrationExecutorFactory` | Interface e seleção por `IntegrationType` (`HTTP`, `QUEUE`) |
 | `integration/http/HttpIntegrationExecutor` | HTTP com retry e circuit breaker; envia `X-Execution-Id` |
 | `integration/queue/*` | `QueueIntegrationExecutor` escolhe publisher por `QueueProvider` (`RABBITMQ`, `KAFKA`, `SQS`) |
@@ -67,6 +67,7 @@ Recursos: `src/main/resources/application.yml`, `application-docker.yml`, `docs/
 | Provider de fila | `QueueProvider`, novo `XxxPublisher`, `case` em `QueueIntegrationExecutor`, config em `config/`, `application.yml`, `build.gradle.kts` |
 | Tipo de integração | `IntegrationType`, config em `domain/model`, `IntegrationExecutor` com `@Component` |
 | Retry e circuit breaker | `orch-integrations.retry-configuration` e `circuit-breaker-configuration` no `application.yml`; default em `config/properties/RetryConfigurationProperties` (500, 429, 408) |
+| `responseMapping` do HTTP e montagem do `FlowExecutionResult` | `service/ResultMapper` (usado por v1 e v2) |
 | Semântica de execução | `OrchestrationService` (v1) e `OrchestrationV2Service` (v2). Mude os dois se a regra for comum |
 | Cache | TTL e warm-up em `orchestrator.cache.workflows.*`; invalidar por `CacheAdminController` ou `WorkflowCacheService.evict`/`evictAll` |
 | Auth com o Manager | `manager/ManagerAuthService`, `orchestrator.manager.*` |
@@ -96,6 +97,7 @@ docker compose up -d && ./gradlew bootRun   # infra local e app
 - Sem RestTemplate, sem banco, sem atualizar Java 21 ou Spring Boot 3.4.5. Retry e circuit breaker ficam externalizados.
 - Virtual threads não herdam MDC nem contexto OTel: código paralelo novo precisa copiar os dois (`OrchestrationV2Service.executeGroupParallel`).
 - Circuito aberto (`CallNotPermittedException`) não é retentado.
+- Os registries de Retry e CircuitBreaker devolvem instâncias singleton por integração: listeners de eventos entram uma vez, em `config/HttpResilienceConfig` (`onEntryAdded`), nunca a cada execução em `HttpIntegrationExecutor` (acumulava consumers e duplicava logs).
 - Testcontainers 1.20.x com Docker Engine 29 ou mais novo falha ao iniciar o cliente Docker. O `build.gradle.kts` fixa `api.version=1.44` nos testes; ao subir a versão do Testcontainers, reavalie.
 - Todo `.java` precisa do header de licença, senão o Spotless falha.
 - Só unitários dão 0,91 de cobertura: o gate precisa do `integrationTest` também. No CI são jobs paralelos (`.github/workflows/ci.yml`) e o job `coverage` junta os `.exec` por artifact, reusando as classes do job `build` (`-x compileJava ...`).
