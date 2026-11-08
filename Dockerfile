@@ -2,7 +2,13 @@
 # ─── Build ────────────────────────────────────────────────────────────────────
 FROM gradle:8.10-jdk21-alpine AS build
 WORKDIR /app
-COPY . .
+# Camada de dependências: só muda quando os arquivos de build mudam
+COPY gradlew settings.gradle.kts build.gradle.kts license-header.txt ./
+COPY gradle ./gradle
+RUN --mount=type=cache,target=/root/.gradle \
+    gradle dependencies --no-daemon > /dev/null
+# Código-fonte: mudanças aqui não invalidam a camada acima
+COPY src ./src
 RUN --mount=type=cache,target=/root/.gradle \
     gradle bootJar --no-daemon -x test
 
