@@ -13,7 +13,7 @@ atualizado-em: 2026-11-07
 
 Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e filas), roda validações, devolve resultado consolidado. Não persiste nada e não faz CRUD de workflows (isso é do `service-portal-manager`): busca o YAML no Manager e cacheia no Redis (TTL 1h).
 
-<!-- gen:size -->Tamanho: 64 arquivos .java em `src/main`, 17 em `src/test`.<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 64 arquivos .java em `src/main`, 18 em `src/test`.<!-- /gen:size -->
 
 Stack: Java 21, Spring Boot 3.4.5 (não atualizar), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
@@ -95,6 +95,7 @@ docker compose up -d && ./gradlew bootRun   # infra local e app
 - Sem RestTemplate, sem banco, sem atualizar Java 21 ou Spring Boot 3.4.5. Retry e circuit breaker ficam externalizados.
 - Virtual threads não herdam MDC nem contexto OTel: código paralelo novo precisa copiar os dois (`OrchestrationV2Service.executeGroupParallel`).
 - Circuito aberto (`CallNotPermittedException`) não é retentado.
+- Os registries de Retry e CircuitBreaker devolvem instâncias singleton por integração: listeners de eventos entram uma vez, em `config/HttpResilienceConfig` (`onEntryAdded`), nunca a cada execução em `HttpIntegrationExecutor` (acumulava consumers e duplicava logs).
 - Testcontainers 1.20.x com Docker Engine 29 ou mais novo falha ao iniciar o cliente Docker. O `build.gradle.kts` fixa `api.version=1.44` nos testes; ao subir a versão do Testcontainers, reavalie.
 - Todo `.java` precisa do header de licença, senão o Spotless falha.
 - O gate JaCoCo cobre `HttpIntegrationExecutor`, `manager/**`, config de Redis, resiliência e Manager, e `CacheAdminController`: mude essas classes com teste.
