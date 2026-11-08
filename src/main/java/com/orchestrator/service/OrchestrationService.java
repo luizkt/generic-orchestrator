@@ -78,7 +78,7 @@ public class OrchestrationService {
                             .toList()) {
                 try {
                     Object result = executorFactory.get(i.getType()).execute(i, ctx);
-                    ctx.putIntegrationResult(i.getId(), applyMapping(i, result));
+                    ctx.putIntegrationResult(i.getId(), ResultMapper.applyMapping(i, result));
                     log.info("Integration '{}' OK", i.getId());
                 } catch (Exception e) {
                     if (i.isContinueOnError()) {
@@ -102,7 +102,7 @@ public class OrchestrationService {
                                 .toList()) {
                     try {
                         Object result = executorFactory.get(v.getType()).execute(v, ctx);
-                        ctx.putValidationResult(v.getId(), applyMapping(v, result));
+                        ctx.putValidationResult(v.getId(), ResultMapper.applyMapping(v, result));
                         log.info("Validation '{}' OK", v.getId());
                     } catch (Exception e) {
                         if (v.isContinueOnError()) {
@@ -123,43 +123,13 @@ public class OrchestrationService {
             ctx.setStatus(hadError ? ExecutionStatus.PARTIAL_SUCCESS : ExecutionStatus.SUCCESS);
             ctx.setFinishedAt(LocalDateTime.now());
 
-            return build(ctx, null);
+            return ResultMapper.build(ctx, null);
         } catch (Exception e) {
             log.error("Error in execution [{}]: {}", ctx.getExecutionId(), e.getMessage(), e);
             ctx.setStatus(ExecutionStatus.FAILED);
             ctx.setErrorMessage(e.getMessage());
             ctx.setFinishedAt(LocalDateTime.now());
-            return build(ctx, e.getMessage());
+            return ResultMapper.build(ctx, e.getMessage());
         }
-    }
-
-    private FlowExecutionResult build(FlowExecutionContext ctx, String error) {
-        return FlowExecutionResult.builder()
-                .executionId(ctx.getExecutionId())
-                .flowId(ctx.getFlowId())
-                .status(ctx.getStatus())
-                .result(ctx.getIntegrations())
-                .validations(ctx.getValidations())
-                .errorMessage(error)
-                .startedAt(ctx.getStartedAt())
-                .finishedAt(ctx.getFinishedAt())
-                .build();
-    }
-
-    @SuppressWarnings("unchecked")
-    private Object applyMapping(IntegrationDefinition i, Object result) {
-        var mapping =
-                switch (i.getType()) {
-                    case HTTP -> i.getHttp() != null ? i.getHttp().getResponseMapping() : null;
-                    default -> null;
-                };
-        if (mapping == null || mapping.getSourceField() == null) return result;
-        if (result instanceof Map<?, ?> m) {
-            Object v = ((Map<String, Object>) m).get(mapping.getSourceField());
-            return Map.of(
-                    mapping.getTargetField() != null ? mapping.getTargetField() : "value",
-                    v != null ? v : "");
-        }
-        return result;
     }
 }

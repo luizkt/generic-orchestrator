@@ -5,7 +5,7 @@ plugins {
     jacoco
     id("org.springframework.boot") version "3.4.5"
     id("io.spring.dependency-management") version "1.1.7"
-    id("com.diffplug.spotless") version "6.25.0"
+    id("com.diffplug.spotless") version "8.11.0"
 }
 
 group = "com.orchestrator"
@@ -23,11 +23,11 @@ configurations {
 
 repositories { mavenCentral() }
 
-extra["awsSdkVersion"] = "2.30.0"
-extra["jjwtVersion"] = "0.12.6"
-extra["testcontainersVersion"] = "1.20.4"
-extra["resilience4jVersion"] = "2.2.0"
-extra["sbaVersion"] = "3.4.0"
+extra["awsSdkVersion"] = "2.57.11"
+extra["jjwtVersion"] = "0.13.0"
+extra["testcontainersVersion"] = "1.21.4"
+extra["resilience4jVersion"] = "2.4.0"
+extra["sbaVersion"] = "3.4.7"
 
 dependencies {
     implementation("de.codecentric:spring-boot-admin-starter-client:${property("sbaVersion")}")
@@ -63,7 +63,7 @@ dependencies {
     implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310")
 
     // Swagger / OpenAPI
-    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.8")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.14")
 
     // Lombok
     compileOnly("org.projectlombok:lombok")
@@ -91,7 +91,7 @@ dependencies {
 spotless {
     java {
         licenseHeaderFile(file("${projectDir}/license-header.txt"))
-        googleJavaFormat().aosp()
+        googleJavaFormat("1.19.2").aosp()
         targetExclude("**/build/**", "**/generated/**")
     }
 }
@@ -102,6 +102,22 @@ tasks.withType<Test> {
     // Docker Engine 29+ recusa a API 1.32 que o docker-java do Testcontainers 1.20.x usa por padrão.
     systemProperty("api.version", "1.44")
 }
+
+// `test` roda só os unitários; os `*IT` (Testcontainers, precisam de Docker) ficam em `integrationTest`.
+tasks.named<Test>("test") {
+    exclude("**/it/**")
+}
+
+val integrationTest by tasks.registering(Test::class) {
+    description = "Testes de integração (Testcontainers) em com.orchestrator.it."
+    group = "verification"
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    include("**/it/**")
+    shouldRunAfter(tasks.named("test"))
+}
+
+tasks.named("check") { dependsOn(integrationTest) }
 
 tasks.named<BootJar>("bootJar") {
     archiveFileName.set("generic-orchestrator.jar")
@@ -126,7 +142,8 @@ val coverageIncludes = listOf(
 )
 
 tasks.named<JacocoReport>("jacocoTestReport") {
-    dependsOn(tasks.named("test"))
+    dependsOn(tasks.named("test"), integrationTest)
+    executionData.setFrom(fileTree(layout.buildDirectory.dir("jacoco")) { include("*.exec") })
     classDirectories.setFrom(
         files(classDirectories.files.map {
             fileTree(it) { include(coverageIncludes) }
@@ -139,7 +156,9 @@ tasks.named<JacocoReport>("jacocoTestReport") {
 }
 
 tasks.named<JacocoCoverageVerification>("jacocoTestCoverageVerification") {
-    dependsOn(tasks.named("test"))
+    dependsOn(tasks.named("test"), integrationTest)
+    // Junta o exec de todos os testes (no CI, os de jobs paralelos chegam por artifact).
+    executionData.setFrom(fileTree(layout.buildDirectory.dir("jacoco")) { include("*.exec") })
     classDirectories.setFrom(
         files(classDirectories.files.map {
             fileTree(it) { include(coverageIncludes) }
