@@ -13,7 +13,7 @@ atualizado-em: 2026-11-07
 
 Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e filas), roda validações, devolve resultado consolidado. Não persiste nada e não faz CRUD de workflows (isso é do `service-portal-manager`): busca o YAML no Manager e cacheia no Redis (TTL 1h).
 
-<!-- gen:size -->Tamanho: 64 arquivos .java em `src/main`, 17 em `src/test`.<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 64 arquivos .java em `src/main`, 22 em `src/test`.<!-- /gen:size -->
 
 Stack: Java 21, Spring Boot 3.4.5 (não atualizar), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
