@@ -107,5 +107,8 @@ docker compose up -d && ./gradlew bootRun   # infra local e app
 - Os registries de Retry e CircuitBreaker devolvem instâncias singleton por integração: listeners de eventos entram uma vez, em `config/HttpResilienceConfig` (`onEntryAdded`), nunca a cada execução em `HttpIntegrationExecutor` (acumulava consumers e duplicava logs).
 - Testcontainers 1.20.x com Docker Engine 29 ou mais novo falha ao iniciar o cliente Docker. O `build.gradle.kts` fixa `api.version=1.44` nos testes; ao subir a versão do Testcontainers, reavalie.
 - Todo `.java` precisa do header de licença, senão o Spotless falha.
+- O container roda como usuário não-root `app` (uid de sistema); só `/app` e `/tmp` são graváveis. Não adicione escrita em outros caminhos.
+- `HEALTHCHECK` da imagem usa `/actuator/health/liveness` (`management.endpoint.health.probes.enabled=true`), independente de Redis/Rabbit/Kafka/Manager; o `/actuator/health` geral devolve 503 sem essas dependências.
+- Ordem das camadas do Dockerfile: `gradlew`/`gradle`/`*.kts` -> `gradle dependencies` -> `COPY src` -> `bootJar`. Não volte a `COPY . .` antes das dependências, senão todo commit invalida o cache.
 - Só unitários dão 0,91 de cobertura: o gate precisa do `integrationTest` também. No CI são jobs paralelos (`.github/workflows/ci.yml`) e o job `coverage` junta os `.exec` por artifact, reusando as classes do job `build` (`-x compileJava ...`).
 - O gate JaCoCo cobre `HttpIntegrationExecutor`, `manager/**`, config de Redis, resiliência e Manager, e `CacheAdminController`: mude essas classes com teste.
