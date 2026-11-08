@@ -33,11 +33,11 @@ import com.orchestrator.integration.IntegrationExecutorFactory;
 import com.orchestrator.manager.WorkflowCacheService;
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.function.BiConsumer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -50,20 +50,8 @@ public class OrchestrationService {
     private final IntegrationExecutorFactory executorFactory;
 
     public FlowExecutionResult execute(String version, String flowId, Map<String, Object> payload) {
-        String executionId = MDC.get("executionId");
-        if (executionId == null) {
-            executionId = UUID.randomUUID().toString();
-            MDC.put("executionId", executionId);
-        }
-        MDC.put("flowId", flowId);
-        MDC.put("version", version);
-
-        FlowExecutionContext ctx = new FlowExecutionContext();
-        ctx.setExecutionId(executionId);
-        ctx.setFlowId(flowId);
-        ctx.setStartedAt(LocalDateTime.now());
-        ctx.setStatus(ExecutionStatus.RUNNING);
-        ctx.setContract(payload != null ? payload : Map.of());
+        FlowExecutionContext ctx = ExecutionSupport.begin(version, flowId, payload);
+        String executionId = ctx.getExecutionId();
 
         log.info("Starting execution [{}] of flow: {} version: {}", executionId, flowId, version);
 
@@ -71,53 +59,11 @@ public class OrchestrationService {
             FlowDefinition def = workflowCacheService.load(flowId, version);
             contractValidationService.validate(def.getContract(), ctx.getContract());
 
-            boolean hadError = false;
-            for (IntegrationDefinition i :
-                    def.getIntegrations().stream()
-                            .sorted(Comparator.comparingInt(IntegrationDefinition::getOrder))
-                            .toList()) {
-                try {
-                    Object result = executorFactory.get(i.getType()).execute(i, ctx);
-                    ctx.putIntegrationResult(i.getId(), ResultMapper.applyMapping(i, result));
-                    log.info("Integration '{}' OK", i.getId());
-                } catch (Exception e) {
-                    if (i.isContinueOnError()) {
-                        log.warn(
-                                "Integration '{}' failed (continuing): {}",
-                                i.getId(),
-                                e.getMessage());
-                        ctx.putIntegrationResult(i.getId(), Map.of("error", e.getMessage()));
-                        hadError = true;
-                    } else {
-                        throw new IntegrationExecutionException(
-                                "Required integration failed: " + i.getId(), e);
-                    }
-                }
-            }
-
+            boolean hadError =
+                    runPhase(def.getIntegrations(), ctx, ctx::putIntegrationResult, "Integration");
             if (def.getValidations() != null && !def.getValidations().isEmpty()) {
-                for (IntegrationDefinition v :
-                        def.getValidations().stream()
-                                .sorted(Comparator.comparingInt(IntegrationDefinition::getOrder))
-                                .toList()) {
-                    try {
-                        Object result = executorFactory.get(v.getType()).execute(v, ctx);
-                        ctx.putValidationResult(v.getId(), ResultMapper.applyMapping(v, result));
-                        log.info("Validation '{}' OK", v.getId());
-                    } catch (Exception e) {
-                        if (v.isContinueOnError()) {
-                            log.warn(
-                                    "Validation '{}' failed (continuing): {}",
-                                    v.getId(),
-                                    e.getMessage());
-                            ctx.putValidationResult(v.getId(), Map.of("error", e.getMessage()));
-                            hadError = true;
-                        } else {
-                            throw new IntegrationExecutionException(
-                                    "Required validation failed: " + v.getId(), e);
-                        }
-                    }
-                }
+                hadError |=
+                        runPhase(def.getValidations(), ctx, ctx::putValidationResult, "Validation");
             }
 
             ctx.setStatus(hadError ? ExecutionStatus.PARTIAL_SUCCESS : ExecutionStatus.SUCCESS);
@@ -126,10 +72,36 @@ public class OrchestrationService {
             return ResultMapper.build(ctx, null);
         } catch (Exception e) {
             log.error("Error in execution [{}]: {}", ctx.getExecutionId(), e.getMessage(), e);
-            ctx.setStatus(ExecutionStatus.FAILED);
-            ctx.setErrorMessage(e.getMessage());
-            ctx.setFinishedAt(LocalDateTime.now());
-            return ResultMapper.build(ctx, e.getMessage());
+            return ExecutionSupport.fail(ctx, e);
         }
+    }
+
+    /** Roda os passos em ordem de {@code order}; devolve true se algum continueOnError falhou. */
+    private boolean runPhase(
+            List<IntegrationDefinition> steps,
+            FlowExecutionContext ctx,
+            BiConsumer<String, Object> resultStore,
+            String label) {
+        boolean hadError = false;
+        for (IntegrationDefinition i :
+                steps.stream()
+                        .sorted(Comparator.comparingInt(IntegrationDefinition::getOrder))
+                        .toList()) {
+            try {
+                Object result = executorFactory.get(i.getType()).execute(i, ctx);
+                resultStore.accept(i.getId(), ResultMapper.applyMapping(i, result));
+                log.info("{} '{}' OK", label, i.getId());
+            } catch (Exception e) {
+                if (i.isContinueOnError()) {
+                    log.warn("{} '{}' failed (continuing): {}", label, i.getId(), e.getMessage());
+                    resultStore.accept(i.getId(), Map.of("error", e.getMessage()));
+                    hadError = true;
+                } else {
+                    throw new IntegrationExecutionException(
+                            "Required " + label.toLowerCase() + " failed: " + i.getId(), e);
+                }
+            }
+        }
+        return hadError;
     }
 }

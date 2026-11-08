@@ -6,14 +6,14 @@
 repo: generic-orchestrator
 tipo: spring-boot-api (executor de fluxos YAML)
 fonte-de-verdade: build.gradle.kts, src/main/resources/application.yml, src/main/java/com/orchestrator
-atualizado-em: 2026-11-07
+atualizado-em: 2026-11-08
 -->
 
 ## Resumo
 
 Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e filas), roda validações, devolve resultado consolidado. Não persiste nada e não faz CRUD de workflows (isso é do `service-portal-manager`): busca o YAML no Manager e cacheia no Redis (TTL 1h).
 
-<!-- gen:size -->Tamanho: 67 arquivos .java em `src/main`, 32 em `src/test`.<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 68 arquivos .java em `src/main`, 32 em `src/test`.<!-- /gen:size -->
 
 Stack: Java 21, Spring Boot 3.4.5 (não atualizar), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
@@ -48,7 +48,7 @@ Base: `src/main/java/com/orchestrator/`.
 | Caminho | Papel |
 |---|---|
 | `GenericOrchestratorApplication` | Entry point |
-| `service/*` | Execução v1 e v2, contrato, template, parse YAML. `service/ResultMapper` (`applyMapping`, `build`) é compartilhado por v1 e v2 |
+| `service/*` | Execução v1 e v2, contrato, template, parse YAML. `service/ResultMapper` (`applyMapping`, `build`) e `service/ExecutionSupport` (`begin`: MDC e contexto; `fail`: resultado FAILED) são compartilhados por v1 e v2 |
 | `integration/IntegrationExecutor` e `integration/IntegrationExecutorFactory` | Interface e seleção por `IntegrationType` (`HTTP`, `QUEUE`) |
 | `integration/http/HttpIntegrationExecutor` | HTTP com retry e circuit breaker; envia `X-Execution-Id` |
 | `integration/queue/*` | `QueueIntegrationExecutor` escolhe publisher por `QueueProvider` (`RABBITMQ`, `KAFKA`, `SQS`) |
@@ -70,7 +70,7 @@ Recursos: `src/main/resources/application.yml`, `application-docker.yml`, `docs/
 | Tipo de integração | `IntegrationType`, config em `domain/model`, `IntegrationExecutor` com `@Component` |
 | Retry e circuit breaker | `orch-integrations.retry-configuration` e `circuit-breaker-configuration` no `application.yml`; default em `config/properties/RetryConfigurationProperties` (500, 429, 408) |
 | `responseMapping` do HTTP e montagem do `FlowExecutionResult` | `service/ResultMapper` (usado por v1 e v2) |
-| Semântica de execução | `OrchestrationService` (v1) e `OrchestrationV2Service` (v2). Mude os dois se a regra for comum |
+| Semântica de execução | `OrchestrationService` (v1, `runPhase` serve integrações e validações) e `OrchestrationV2Service` (v2, `executePhase`/`runStep`). Início e falha ficam em `ExecutionSupport`; mude v1 e v2 se a regra por passo for comum |
 | Cache | TTL e warm-up em `orchestrator.cache.workflows.*`; invalidar por `CacheAdminController` ou `WorkflowCacheService.evict`/`evictAll` |
 | Auth com o Manager | `manager/ManagerAuthService`, `orchestrator.manager.*` |
 | Rota pública da API | `security/SecurityConfig` (chain JWT, `@Order(2)`) |
