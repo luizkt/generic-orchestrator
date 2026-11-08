@@ -35,10 +35,12 @@ import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.retry.RetryRegistry;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+@Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class HttpResilienceConfig {
@@ -75,7 +77,22 @@ public class HttpResilienceConfig {
                                 })
                         .build();
 
-        return RetryRegistry.of(config);
+        RetryRegistry registry = RetryRegistry.of(config);
+        // Listeners registrados uma única vez por instância (inclusive as criadas sob demanda).
+        registry.getEventPublisher()
+                .onEntryAdded(
+                        added ->
+                                added.getAddedEntry()
+                                        .getEventPublisher()
+                                        .onRetry(
+                                                e ->
+                                                        log.warn(
+                                                                "[HTTP] Retry #{} para '{}' após: {}",
+                                                                e.getNumberOfRetryAttempts(),
+                                                                e.getName(),
+                                                                e.getLastThrowable()
+                                                                        .getMessage())));
+        return registry;
     }
 
     @Bean
@@ -102,6 +119,28 @@ public class HttpResilienceConfig {
                         .slowCallRateThreshold(100)
                         .build();
 
-        return CircuitBreakerRegistry.of(config);
+        CircuitBreakerRegistry registry = CircuitBreakerRegistry.of(config);
+        // Listeners registrados uma única vez por instância (inclusive as criadas sob demanda).
+        registry.getEventPublisher()
+                .onEntryAdded(
+                        added ->
+                                added.getAddedEntry()
+                                        .getEventPublisher()
+                                        .onStateTransition(
+                                                e ->
+                                                        log.warn(
+                                                                "[CB] '{}' transitou: {} → {}",
+                                                                e.getCircuitBreakerName(),
+                                                                e.getStateTransition()
+                                                                        .getFromState(),
+                                                                e.getStateTransition()
+                                                                        .getToState()))
+                                        .onCallNotPermitted(
+                                                e ->
+                                                        log.warn(
+                                                                "[CB] Chamada bloqueada pelo"
+                                                                        + " circuit breaker: {}",
+                                                                e.getCircuitBreakerName())));
+        return registry;
     }
 }

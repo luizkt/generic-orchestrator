@@ -100,29 +100,6 @@ public class HttpIntegrationExecutor implements IntegrationExecutor {
 
         Supplier<String> withRetry = Retry.decorateSupplier(retry, httpCall);
 
-        retry.getEventPublisher()
-                .onRetry(
-                        e ->
-                                log.warn(
-                                        "[HTTP] Retry #{} para '{}' após: {}",
-                                        e.getNumberOfRetryAttempts(),
-                                        def.getId(),
-                                        e.getLastThrowable().getMessage()));
-
-        cb.getEventPublisher()
-                .onStateTransition(
-                        e ->
-                                log.warn(
-                                        "[CB] '{}' transitou: {} → {}",
-                                        def.getId(),
-                                        e.getStateTransition().getFromState(),
-                                        e.getStateTransition().getToState()))
-                .onCallNotPermitted(
-                        e ->
-                                log.warn(
-                                        "[CB] Chamada bloqueada pelo circuit breaker: {}",
-                                        def.getId()));
-
         try {
             String resp = withRetry.get();
             if (resp == null || resp.isBlank()) return Map.of();
