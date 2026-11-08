@@ -22,7 +22,7 @@ Os workflows em si **não são armazenados pelo orquestrador** — vivem no [`se
 | Componente | Versão |
 |---|---|
 | Java | 21 LTS |
-| Spring Boot | 3.4.13 |
+| Spring Boot | 3.5.16 |
 | Gradle | Kotlin DSL |
 | RabbitMQ | 3 (management) |
 | Kafka | Bitnami 3.7 (KRaft) |

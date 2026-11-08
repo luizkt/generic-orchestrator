@@ -15,7 +15,7 @@ Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e fi
 
 <!-- gen:size -->Tamanho: 68 arquivos .java em `src/main`, 32 em `src/test`.<!-- /gen:size -->
 
-Stack: Java 21, Spring Boot 3.4.13 (em migração para 4.1.x, ver `../docs/plans/PLAN-spring-boot-upgrade.md`; suba uma linha por vez), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
+Stack: Java 21, Spring Boot 3.5.16 (em migração para 4.1.x, ver `../docs/plans/PLAN-spring-boot-upgrade.md`; suba uma linha por vez), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
 ## Endpoints
 
