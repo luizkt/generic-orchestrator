@@ -15,7 +15,7 @@ Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e fi
 
 <!-- gen:size -->Tamanho: 68 arquivos .java em `src/main`, 32 em `src/test`.<!-- /gen:size -->
 
-Stack: Java 21, Spring Boot 3.5.16 (em migração para 4.1.x, ver `../docs/plans/PLAN-spring-boot-upgrade.md`; suba uma linha por vez), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
+Stack: Java 21, Spring Boot 4.0.9 (em migração para 4.1.x, ver `../docs/plans/PLAN-spring-boot-upgrade.md`; suba uma linha por vez), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
 ## Endpoints
 
@@ -102,15 +102,18 @@ docker compose up -d && ./gradlew bootRun   # infra local e app
 
 - Segredos nunca em `ENV` do Dockerfile: injete em runtime (compose/secret). Rota nova de actuator fora de health, info e prometheus fica protegida por padrão; não volte a liberar `/actuator/**` nem exponha `heapdump` (contém o `JWT_SECRET`).
 - O `JwtAuthenticationFilter` fica só na chain da API (registro de servlet desligado em `SecurityConfig`); um Bearer não abre o actuator.
-- Testes que leem `/actuator/prometheus` com MockMvc precisam de `@AutoConfigureObservability` (o `@SpringBootTest` desliga o export de métricas).
+- Testes que leem `/actuator/prometheus` com MockMvc precisam de `@AutoConfigureMetrics` (`org.springframework.boot.micrometer.metrics.test.autoconfigure`, starter `micrometer-metrics-test`) (o `@SpringBootTest` desliga o export de métricas).
 - Sem RestTemplate, sem banco, sem atualizar Java 21. O Spring Boot sobe só pelos marcos do plano de upgrade. Retry e circuit breaker ficam externalizados.
 - Virtual threads não herdam MDC nem contexto OTel: código paralelo novo precisa copiar os dois (`OrchestrationV2Service.executeGroupParallel`).
 - Circuito aberto (`CallNotPermittedException`) não é retentado.
 - Os registries de Retry e CircuitBreaker devolvem instâncias singleton por integração: listeners de eventos entram uma vez, em `config/HttpResilienceConfig` (`onEntryAdded`), nunca a cada execução em `HttpIntegrationExecutor` (acumulava consumers e duplicava logs).
-- Testcontainers 1.20.x com Docker Engine 29 ou mais novo falha ao iniciar o cliente Docker. O `build.gradle.kts` fixa `api.version=1.44` nos testes; ao subir a versão do Testcontainers, reavalie.
+- Testcontainers 1.x com Docker Engine 29 ou mais novo falhava ao iniciar o cliente Docker. O `build.gradle.kts` fixa `api.version=1.44` nos testes; ao subir a versão do Testcontainers, reavalie.
 - Todo `.java` precisa do header de licença, senão o Spotless falha.
 - O container roda como usuário não-root `app` (uid de sistema); só `/app` e `/tmp` são graváveis. Não adicione escrita em outros caminhos.
 - `HEALTHCHECK` da imagem usa `/actuator/health/liveness` (`management.endpoint.health.probes.enabled=true`), independente de Redis/Rabbit/Kafka/Manager; o `/actuator/health` geral devolve 503 sem essas dependências.
 - Ordem das camadas do Dockerfile: `gradlew`/`gradle`/`*.kts` -> `gradle dependencies` -> `COPY src` -> `bootJar`. Não volte a `COPY . .` antes das dependências, senão todo commit invalida o cache.
 - Só unitários dão 0,91 de cobertura: o gate precisa do `integrationTest` também. No CI são jobs paralelos (`.github/workflows/ci.yml`) e o job `coverage` junta os `.exec` por artifact, reusando as classes do job `build` (`-x compileJava ...`).
 - O gate JaCoCo (>= 95% INSTRUCTION, lista `coverageIncludes` em `build.gradle.kts`) cobre `HttpIntegrationExecutor`, `manager/**`, config de Redis, resiliência e Manager, `CacheAdminController`, `ContractValidationService`, `TemplateResolverService`, `YamlParserService`, `integration/queue/**`, `SqsConfig`, `KafkaMultiInstanceConfig` e `RabbitMqMultiInstanceConfig`, `JwtService`, `ExecutionMdcFilter` e `exception/**`: mude essas classes com teste. Seguem fora do gate (inclua ao cobrir): `WebClientConfig` (68%), `OrchestrationController` (80%), `JwtAuthenticationFilter` (90%), `OrchestrationService` (90%), `OrchestrationV2Service` (91%), `GenericOrchestratorApplication` (38%). Novas classes só entram no gate se >= 95% após o merge unit+IT.
+- Boot 4 / Jackson 3: `ObjectMapper`, `JsonMapper` e `YAMLMapper` vêm de `tools.jackson.*` (módulo de datas já embutido, sem `JavaTimeModule`); anotações seguem em `com.fasterxml.jackson.annotation`. O cache Redis usa `JacksonJsonRedisSerializer` e o RabbitMQ `JacksonJsonMessageConverter`. Primitivo `null` no JSON agora falha (`FAIL_ON_NULL_FOR_PRIMITIVES`): payloads de teste precisam trazer os nomes reais do DTO (`version`/`active` em `WorkflowSummary`). O `jjwt-jackson` 0.13 ainda usa Jackson 2, por isso `jackson-databind` 2.x entra como `runtimeOnly`.
+- Testcontainers 2: módulos `testcontainers-*`, `org.testcontainers.rabbitmq.RabbitMQContainer`, `org.testcontainers.kafka.ConfluentKafkaContainer` (imagem cp-kafka) e `LocalStackContainer.withServices("sqs")` com `getEndpoint()`. O MockWebServer 4.12 exige OkHttp 4.12 nos classpaths de teste (o Boot 4 gerencia o OkHttp 5): o `build.gradle.kts` força só nos testes.
+- Starters novos no Boot 4: `webmvc`, `webclient` (sem ele não há `WebClient.Builder`), `kafka`, e os de teste `webmvc-test`, `security-test`, `micrometer-metrics-test`; `@AutoConfigureMockMvc` fica em `org.springframework.boot.webmvc.test.autoconfigure`.

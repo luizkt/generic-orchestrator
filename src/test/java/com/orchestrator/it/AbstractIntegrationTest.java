@@ -28,10 +28,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.KafkaContainer;
-import org.testcontainers.containers.RabbitMQContainer;
-import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.kafka.ConfluentKafkaContainer;
+import org.testcontainers.localstack.LocalStackContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
 
 @SpringBootTest
@@ -41,11 +41,11 @@ public abstract class AbstractIntegrationTest {
 
     static final RabbitMQContainer RABBIT =
             new RabbitMQContainer(DockerImageName.parse("rabbitmq:3-management"));
-    static final KafkaContainer KAFKA =
-            new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"));
+    static final ConfluentKafkaContainer KAFKA =
+            new ConfluentKafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"));
     static final LocalStackContainer LOCALSTACK =
             new LocalStackContainer(DockerImageName.parse("localstack/localstack:3"))
-                    .withServices(LocalStackContainer.Service.SQS);
+                    .withServices("sqs");
 
     @SuppressWarnings("resource")
     static final GenericContainer<?> REDIS =
@@ -68,9 +68,7 @@ public abstract class AbstractIntegrationTest {
         r.add("spring.rabbitmq.password", RABBIT::getAdminPassword);
         r.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
         r.add("orchestrator.aws.region", () -> LOCALSTACK.getRegion());
-        r.add(
-                "orchestrator.aws.sqs.endpoint",
-                () -> LOCALSTACK.getEndpointOverride(LocalStackContainer.Service.SQS).toString());
+        r.add("orchestrator.aws.sqs.endpoint", () -> LOCALSTACK.getEndpoint().toString());
         r.add("orchestrator.aws.sqs.access-key", LOCALSTACK::getAccessKey);
         r.add("orchestrator.aws.sqs.secret-key", LOCALSTACK::getSecretKey);
 

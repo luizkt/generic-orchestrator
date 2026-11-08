@@ -23,9 +23,6 @@
  */
 package com.orchestrator.config;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.orchestrator.domain.model.FlowDefinition;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,19 +32,21 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Cache Redis dos workflows ativos. Chave: `workflows::{flowId}_{versao}`.
  *
  * <p>TTL padrão de 1 hora (configurável via `orchestrator.cache.workflows.ttl-seconds`).
  *
- * <p>Usa Jackson2JsonRedisSerializer<FlowDefinition> com tipo concreto fixo — sem necessidade
- * de @class no JSON. GenericJackson2JsonRedisSerializer com activateDefaultTyping(NON_FINAL) +
+ * <p>Usa JacksonJsonRedisSerializer<FlowDefinition> com tipo concreto fixo — sem necessidade
+ * de @class no JSON. GenericJacksonJsonRedisSerializer com activateDefaultTyping(NON_FINAL) +
  * BasicPolymorphicTypeValidator não embute
  *
- * @class no JSON em Jackson 2.12+ quando o tipo raiz é conhecido, causando ClassCastException ao
+ * @class no JSON no Jackson quando o tipo raiz é conhecido, causando ClassCastException ao
  *     desserializar (LinkedHashMap → FlowDefinition).
  */
 @Configuration
@@ -61,12 +60,13 @@ public class RedisCacheConfig {
 
     @Bean
     public RedisCacheManager workflowsCacheManager(RedisConnectionFactory connectionFactory) {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        JsonMapper mapper =
+                JsonMapper.builder()
+                        .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                        .build();
 
-        Jackson2JsonRedisSerializer<FlowDefinition> serializer =
-                new Jackson2JsonRedisSerializer<>(mapper, FlowDefinition.class);
+        JacksonJsonRedisSerializer<FlowDefinition> serializer =
+                new JacksonJsonRedisSerializer<>(mapper, FlowDefinition.class);
 
         RedisCacheConfiguration cfg =
                 RedisCacheConfiguration.defaultCacheConfig()

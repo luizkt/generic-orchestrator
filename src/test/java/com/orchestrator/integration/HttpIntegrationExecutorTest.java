@@ -26,7 +26,6 @@ package com.orchestrator.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orchestrator.config.HttpResilienceConfig;
 import com.orchestrator.config.properties.CircuitBreakerConfigurationProperties;
 import com.orchestrator.config.properties.OrchIntegrationsProperties;
@@ -52,6 +51,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
+import tools.jackson.databind.ObjectMapper;
 
 class HttpIntegrationExecutorTest {
 

@@ -23,7 +23,6 @@
  */
 package com.orchestrator.integration.http;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.orchestrator.config.properties.OrchIntegrationsProperties;
 import com.orchestrator.domain.execution.FlowExecutionContext;
 import com.orchestrator.domain.model.HttpIntegrationConfig;
@@ -49,6 +48,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import tools.jackson.databind.ObjectMapper;
 
 @Slf4j
 @Component

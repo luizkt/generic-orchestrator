@@ -29,8 +29,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -38,7 +38,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * Garante que o HEALTHCHECK do Dockerfile (liveness anônimo) convive com a cadeia de actuator
  * protegida.
  */
-@AutoConfigureObservability
+@AutoConfigureMetrics
 @AutoConfigureMockMvc
 @TestPropertySource(
         properties = {
