@@ -54,7 +54,7 @@ Base: `src/main/java/com/orchestrator/`.
 | `integration/queue/*` | `QueueIntegrationExecutor` escolhe publisher por `QueueProvider` (`RABBITMQ`, `KAFKA`, `SQS`) |
 | `manager/*` | Cliente do Manager, login server-to-server (`ManagerAuthService`), cache e warm-up |
 | `domain/model/*`, `domain/execution/*` | Modelo do fluxo YAML, contexto e resultado da execução |
-| `security/*` | JWT stateless e rotas públicas |
+| `security/*` | Chain da API (`SecurityConfig`, JWT stateless, `@Order(2)`), chain do actuator (`ActuatorSecurityConfig`, Basic, `@Order(1)`), login (`AuthController`, credencial por env) e `SecurityDefaultsGuard` |
 | `config/*` | Redis, resiliência, WebClient, instâncias Kafka/Rabbit/SQS e `config/properties/*` |
 | `exception/*`, `dto/*`, `filter/ExecutionMdcFilter` | Exceções e mapeamento HTTP, DTOs, `executionId` no MDC e no header |
 
