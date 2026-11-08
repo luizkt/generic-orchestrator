@@ -85,8 +85,9 @@ Recursos: `src/main/resources/application.yml`, `application-docker.yml`, `docs/
 
 ```bash
 docker compose up -d && ./gradlew bootRun   # infra local e app
-./gradlew test                              # unitários; IT em src/test/java/com/orchestrator/it
-./gradlew jacocoTestCoverageVerification    # gate >= 95% (classes listadas em build.gradle.kts)
+./gradlew test                              # só unitários (exclui o pacote it)
+./gradlew integrationTest                   # *IT com Testcontainers (precisa de Docker)
+./gradlew jacocoTestCoverageVerification    # roda os dois e verifica >= 95% sobre o merge dos .exec
 ./gradlew spotlessApply                     # obrigatório antes de commit
 ```
 
@@ -97,4 +98,5 @@ docker compose up -d && ./gradlew bootRun   # infra local e app
 - Circuito aberto (`CallNotPermittedException`) não é retentado.
 - Testcontainers 1.20.x com Docker Engine 29 ou mais novo falha ao iniciar o cliente Docker. O `build.gradle.kts` fixa `api.version=1.44` nos testes; ao subir a versão do Testcontainers, reavalie.
 - Todo `.java` precisa do header de licença, senão o Spotless falha.
+- Só unitários dão 0,91 de cobertura: o gate precisa do `integrationTest` também. No CI são jobs paralelos (`.github/workflows/ci.yml`) e o job `coverage` junta os `.exec` por artifact, reusando as classes do job `build` (`-x compileJava ...`).
 - O gate JaCoCo cobre `HttpIntegrationExecutor`, `manager/**`, config de Redis, resiliência e Manager, e `CacheAdminController`: mude essas classes com teste.
