@@ -33,6 +33,13 @@ spring:
               password: ${ACTUATOR_PASSWORD:}
 
 orchestrator:
+  # Pool de platform threads da v2. Política de saturação: fila limitada + CallerRunsPolicy.
+  platform-pool:
+    core-size: ${PLATFORM_POOL_CORE_SIZE:200}
+    max-size: ${PLATFORM_POOL_MAX_SIZE:200}
+    queue-capacity: ${PLATFORM_POOL_QUEUE_CAPACITY:200}
+    keep-alive-seconds: ${PLATFORM_POOL_KEEP_ALIVE_SECONDS:60}
+    thread-name-prefix: orch-v2-
   http-client:
     connect-timeout: ${HTTP_CONNECT_TIMEOUT:5000}
     read-timeout: ${HTTP_READ_TIMEOUT:30000}

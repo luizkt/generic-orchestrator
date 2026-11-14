@@ -36,13 +36,16 @@ import com.orchestrator.integration.IntegrationExecutorFactory;
 import com.orchestrator.manager.WorkflowCacheService;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -54,18 +57,35 @@ class OrchestrationV2ServiceTest {
     @Mock private IntegrationExecutorFactory executorFactory;
     @Mock private IntegrationExecutor httpExecutor;
 
-    @InjectMocks private OrchestrationV2Service service;
+    private OrchestrationV2Service service;
+    private ThreadPoolExecutor pool;
 
     private FlowDefinition flow;
 
     @BeforeEach
     void setUp() {
+        pool =
+                new ThreadPoolExecutor(
+                        4,
+                        4,
+                        0,
+                        TimeUnit.SECONDS,
+                        new ArrayBlockingQueue<>(8),
+                        new ThreadPoolExecutor.CallerRunsPolicy());
+        service =
+                new OrchestrationV2Service(
+                        workflowCacheService, contractValidationService, executorFactory, pool);
         FlowContract contract = new FlowContract();
         contract.setFields(List.of());
         flow = new FlowDefinition();
         flow.setFlowId("test-flow");
         flow.setActive(true);
         flow.setContract(contract);
+    }
+
+    @AfterEach
+    void tearDown() {
+        pool.shutdownNow();
     }
 
     private IntegrationDefinition httpStep(String id, int order) {
@@ -92,7 +112,7 @@ class OrchestrationV2ServiceTest {
     }
 
     @Test
-    @DisplayName("Integrações com mesmo order executam em paralelo via virtual threads")
+    @DisplayName("Integrações com mesmo order executam em paralelo via threads físicas (pool)")
     void sameOrderRunsInParallel() throws Exception {
         IntegrationDefinition i1 = httpStep("step-a", 1);
         IntegrationDefinition i2 = httpStep("step-b", 1);
