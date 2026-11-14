@@ -32,7 +32,7 @@ BUILD_FILES = {
 }
 TEST_RE = re.compile(r"(^|/)__tests__/|\.(test|spec)\.[jt]sx?$")
 ENTRY_NAMES = {"main", "index", "app", "server", "Main", "App"}
-DEFAULT_MAX_TOKENS = 3500
+DEFAULT_MAX_TOKENS = 4000
 
 
 def tracked_files(root: Path) -> list[str]:
