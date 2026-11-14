@@ -46,6 +46,7 @@ dependencies {
     // Resilience4j (retry + circuit breaker para integrações HTTP)
     implementation("io.github.resilience4j:resilience4j-retry:${property("resilience4jVersion")}")
     implementation("io.github.resilience4j:resilience4j-circuitbreaker:${property("resilience4jVersion")}")
+    implementation("io.github.resilience4j:resilience4j-micrometer:${property("resilience4jVersion")}")
 
     // Kafka
     implementation("org.springframework.boot:spring-boot-starter-kafka")

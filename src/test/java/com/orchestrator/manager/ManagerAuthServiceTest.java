@@ -70,7 +70,7 @@ class ManagerAuthServiceTest {
                 new MockResponse()
                         .setResponseCode(200)
                         .setHeader("Content-Type", "application/json")
-                        .setBody("{\"token\":\"jwt-1\",\"type\":\"Bearer\"}"));
+                        .setBody("{\"token\":\"jwt-1\",\"type\":\"Bearer\",\"expiresIn\":3600}"));
 
         assertThat(authService.getToken()).isEqualTo("jwt-1");
 

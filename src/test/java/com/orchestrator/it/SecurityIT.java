@@ -57,6 +57,17 @@ class SecurityIT extends AbstractIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"v2", "v3"})
+    @DisplayName("v2 and v3 execution endpoints are also protected")
+    void blocksV2AndV3WithoutToken(String v) throws Exception {
+        mockMvc.perform(
+                        post("/api/" + v + "/flows/any-flow/versions/v1/executions")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
     @Test
     @DisplayName("POST /api/auth/tokens with valid credentials returns 201 + JWT")
     void createsTokenSuccessfully() throws Exception {

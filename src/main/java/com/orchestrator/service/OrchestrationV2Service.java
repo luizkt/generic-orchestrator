@@ -23,181 +23,45 @@
  */
 package com.orchestrator.service;
 
-import com.orchestrator.domain.execution.ExecutionStatus;
-import com.orchestrator.domain.execution.FlowExecutionContext;
-import com.orchestrator.domain.execution.FlowExecutionResult;
-import com.orchestrator.domain.model.FlowDefinition;
-import com.orchestrator.domain.model.IntegrationDefinition;
-import com.orchestrator.exception.IntegrationExecutionException;
+import com.orchestrator.config.PlatformThreadPoolConfig;
 import com.orchestrator.integration.IntegrationExecutorFactory;
 import com.orchestrator.manager.WorkflowCacheService;
-import io.opentelemetry.context.Context;
-import io.opentelemetry.context.Scope;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 /**
- * Executa o fluxo com paralelismo por grupo de {@code order}.
- *
- * <p>Integrações com o mesmo valor de {@code order} são disparadas simultaneamente via Java Virtual
- * Threads (Project Loom). Grupos distintos são executados em sequência — o grupo N+1 só começa após
- * todos os itens do grupo N terminarem. Após todas as integrações, a fase de validações é executada
- * com o mesmo padrão.
+ * v2 — paralelismo por grupo de {@code order} com threads físicas (platform threads) num pool fixo
+ * compartilhado entre todas as requests (ver {@link PlatformThreadPoolConfig}). O pool é um bean
+ * singleton e nunca é fechado por request. Sob saturação vale a política do pool
+ * (CallerRunsPolicy): a tarefa excedente roda na thread da request.
  */
-@Slf4j
 @Service
-@RequiredArgsConstructor
-public class OrchestrationV2Service {
+public class OrchestrationV2Service extends AbstractParallelOrchestrationService {
 
-    private final WorkflowCacheService workflowCacheService;
-    private final ContractValidationService contractValidationService;
-    private final IntegrationExecutorFactory executorFactory;
+    private final ExecutorService pool;
 
-    public FlowExecutionResult execute(String version, String flowId, Map<String, Object> payload) {
-        FlowExecutionContext ctx = ExecutionSupport.begin(version, flowId, payload);
-        String executionId = ctx.getExecutionId();
-
-        log.info(
-                "[v2] Starting execution [{}] of flow: {} version: {}",
-                executionId,
-                flowId,
-                version);
-
-        try {
-            FlowDefinition def = workflowCacheService.load(flowId, version);
-            contractValidationService.validate(def.getContract(), ctx.getContract());
-
-            AtomicBoolean hadError = new AtomicBoolean(false);
-
-            executePhase(
-                    def.getIntegrations(), ctx, hadError, ctx::putIntegrationResult, "integration");
-            executePhase(
-                    def.getValidations(), ctx, hadError, ctx::putValidationResult, "validation");
-
-            ctx.setStatus(
-                    hadError.get() ? ExecutionStatus.PARTIAL_SUCCESS : ExecutionStatus.SUCCESS);
-            ctx.setFinishedAt(LocalDateTime.now());
-            return ResultMapper.build(ctx, null);
-
-        } catch (Exception e) {
-            log.error("[v2] Error in execution [{}]: {}", ctx.getExecutionId(), e.getMessage(), e);
-            return ExecutionSupport.fail(ctx, e);
-        }
+    public OrchestrationV2Service(
+            WorkflowCacheService workflowCacheService,
+            ContractValidationService contractValidationService,
+            IntegrationExecutorFactory executorFactory,
+            @Qualifier(PlatformThreadPoolConfig.BEAN_NAME) ExecutorService pool) {
+        super(workflowCacheService, contractValidationService, executorFactory);
+        this.pool = pool;
     }
 
-    private void executePhase(
-            List<IntegrationDefinition> steps,
-            FlowExecutionContext ctx,
-            AtomicBoolean hadError,
-            BiConsumer<String, Object> resultStore,
-            String stepType) {
-        if (steps == null || steps.isEmpty()) return;
-        Map<Integer, List<IntegrationDefinition>> byOrder =
-                steps.stream()
-                        .collect(
-                                Collectors.groupingBy(
-                                        IntegrationDefinition::getOrder,
-                                        TreeMap::new,
-                                        Collectors.toList()));
-        for (List<IntegrationDefinition> group : byOrder.values()) {
-            if (group.size() == 1) {
-                runStep(group.get(0), ctx, hadError, resultStore, stepType);
-            } else {
-                executeGroupParallel(group, ctx, hadError, resultStore, stepType);
-            }
-        }
+    @Override
+    protected String versionTag() {
+        return "v2";
     }
 
-    private void executeGroupParallel(
-            List<IntegrationDefinition> group,
-            FlowExecutionContext ctx,
-            AtomicBoolean hadError,
-            BiConsumer<String, Object> resultStore,
-            String stepType) {
-        List<IntegrationExecutionException> requiredFailures = new ArrayList<>();
-        Map<String, String> mdcSnapshot = MDC.getCopyOfContextMap();
-        // Captura o contexto OTel e MDC antes de submeter às Virtual Threads,
-        // que não herdam ThreadLocal do parent por padrão.
-        Context otelCtx = Context.current();
-
-        try (ExecutorService vte = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Future<?>> futures =
-                    group.stream()
-                            .<Future<?>>map(
-                                    i ->
-                                            vte.submit(
-                                                    () -> {
-                                                        try (Scope ignored =
-                                                                otelCtx.makeCurrent()) {
-                                                            if (mdcSnapshot != null)
-                                                                MDC.setContextMap(mdcSnapshot);
-                                                            try {
-                                                                runStep(
-                                                                        i,
-                                                                        ctx,
-                                                                        hadError,
-                                                                        resultStore,
-                                                                        stepType);
-                                                            } finally {
-                                                                MDC.clear();
-                                                            }
-                                                        }
-                                                    }))
-                            .toList();
-
-            for (Future<?> f : futures) {
-                try {
-                    f.get();
-                } catch (Exception e) {
-                    Throwable cause = e.getCause() != null ? e.getCause() : e;
-                    if (cause instanceof IntegrationExecutionException iee) {
-                        requiredFailures.add(iee);
-                    }
-                }
-            }
-        }
-
-        if (!requiredFailures.isEmpty()) {
-            throw requiredFailures.get(0);
-        }
+    @Override
+    protected ExecutorService openGroupExecutor() {
+        return pool;
     }
 
-    private void runStep(
-            IntegrationDefinition i,
-            FlowExecutionContext ctx,
-            AtomicBoolean hadError,
-            BiConsumer<String, Object> resultStore,
-            String stepType) {
-        try {
-            Object result = executorFactory.get(i.getType()).execute(i, ctx);
-            resultStore.accept(i.getId(), ResultMapper.applyMapping(i, result));
-            log.info("[v2] {} '{}' OK", stepType, i.getId());
-        } catch (Exception e) {
-            if (i.isContinueOnError()) {
-                log.warn(
-                        "[v2] {} '{}' failed (continuing): {}",
-                        stepType,
-                        i.getId(),
-                        e.getMessage());
-                resultStore.accept(i.getId(), Map.of("error", e.getMessage()));
-                hadError.set(true);
-            } else {
-                throw new IntegrationExecutionException(
-                        "Required " + stepType + " failed: " + i.getId(), e);
-            }
-        }
+    @Override
+    protected void closeGroupExecutor(ExecutorService executor) {
+        // pool compartilhado: o ciclo de vida é do Spring
     }
 }

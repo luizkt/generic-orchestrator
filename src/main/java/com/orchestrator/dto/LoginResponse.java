@@ -23,10 +23,13 @@
  */
 package com.orchestrator.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/** Resposta de login. O Manager também devolve {@code expiresIn}, ignorado aqui. */
+@JsonIgnoreProperties(ignoreUnknown = true)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

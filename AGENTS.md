@@ -6,14 +6,14 @@
 repo: generic-orchestrator
 tipo: spring-boot-api (executor de fluxos YAML)
 fonte-de-verdade: build.gradle.kts, src/main/resources/application.yml, src/main/java/com/orchestrator
-atualizado-em: 2026-11-08
+atualizado-em: 2026-11-14
 -->
 
 ## Resumo
 
 Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e filas), roda validações, devolve resultado consolidado. Não persiste nada e não faz CRUD de workflows (isso é do `service-portal-manager`): busca o YAML no Manager e cacheia no Redis (TTL 1h).
 
-<!-- gen:size -->Tamanho: 68 arquivos .java em `src/main`, 32 em `src/test`.<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 75 arquivos .java em `src/main`, 36 em `src/test`.<!-- /gen:size -->
 
 Stack: Java 21, Spring Boot 4.1.2 (plano de upgrade concluído em `../docs/plans/PLAN-spring-boot-upgrade.md`; próximas subidas seguem o mesmo método, uma linha por vez), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
@@ -23,7 +23,8 @@ Stack: Java 21, Spring Boot 4.1.2 (plano de upgrade concluído em `../docs/plans
 |---|---|---|
 | `POST /api/auth/tokens` | público | `security/AuthController` |
 | `POST /api/v1/flows/{flowId}/versions/{version}/executions` | JWT | `controller/OrchestrationController` → `service/OrchestrationService` (sequencial) |
-| `POST /api/v2/flows/{flowId}/versions/{version}/executions` | JWT | mesmo controller → `service/OrchestrationV2Service` (paralelo por `order`, virtual threads) |
+| `POST /api/v2/flows/{flowId}/versions/{version}/executions` | JWT | mesmo controller → `service/OrchestrationV2Service` (paralelo por `order`, threads físicas em pool fixo compartilhado) |
+| `POST /api/v3/flows/{flowId}/versions/{version}/executions` | JWT | mesmo controller → `service/OrchestrationV3Service` (paralelo por `order`, virtual threads, 1 por tarefa) |
 | `DELETE /api/admin/cache/workflows[/{flowId}/versions/{version}]` | JWT | `controller/CacheAdminController` |
 | `/actuator/health/**`, `/actuator/info`, `/actuator/prometheus` | público | `security/ActuatorSecurityConfig` |
 | restante de `/actuator/**` (env, loggers, threaddump, metrics, caches, beans) | Basic, role `ACTUATOR` | `security/ActuatorSecurityConfig` |
@@ -39,7 +40,7 @@ O controller sempre responde 200 com `OrchestrationResponse`. O resultado vai em
 4. Validações do fluxo, mesmo mecanismo.
 5. Passo com `continueOnError` grava `{error: msg}` e segue; sem a flag lança `IntegrationExecutionException` e o fluxo vira `FAILED`.
 
-v2: passos com o mesmo `order` rodam em paralelo; os irmãos terminam antes de a falha ser relançada; grupos e validações seguintes não rodam. Templates `{{contract.x}}`, `{{integrations.id.campo}}`, `{{now()}}` ficam em `service/TemplateResolverService`; valor ausente vira `""` e nunca lança.
+v2 e v3 (base `service/AbstractParallelOrchestrationService`; só o executor muda): passos com o mesmo `order` rodam em paralelo; grupo de 1 passo roda inline; os irmãos terminam antes de a falha ser relançada; grupos e validações seguintes não rodam. Templates `{{contract.x}}`, `{{integrations.id.campo}}`, `{{now()}}` ficam em `service/TemplateResolverService`; valor ausente vira `""` e nunca lança.
 
 ## Mapa
 
@@ -48,13 +49,15 @@ Base: `src/main/java/com/orchestrator/`.
 | Caminho | Papel |
 |---|---|
 | `GenericOrchestratorApplication` | Entry point |
-| `service/*` | Execução v1 e v2, contrato, template, parse YAML. `service/ResultMapper` (`applyMapping`, `build`) e `service/ExecutionSupport` (`begin`: MDC e contexto; `fail`: resultado FAILED) são compartilhados por v1 e v2 |
+| `service/*` | Execução v1 (`OrchestrationService`) e v2/v3 (`AbstractParallelOrchestrationService`: ponto de extensão `openGroupExecutor`/`closeGroupExecutor`/`versionTag`; v2 usa o pool compartilhado, nunca fechado; v3 `newVirtualThreadPerTaskExecutor` por grupo), contrato, template, parse YAML. `service/ResultMapper` (`applyMapping`, `build`) e `service/ExecutionSupport` (`begin`: MDC e contexto; `fail`: resultado FAILED) são compartilhados por v1, v2 e v3 |
+| `metrics/*` | `ExecutionMetrics` (timer `orchestrator.execution`, tags `version` v1/v2/v3 e `status`, usado no controller), `ResilienceMetricsConfig` (`resilience4j_circuitbreaker_*` e `resilience4j_retry_*` por integração), `VirtualThreadPinningMetrics` (JFR `jdk.VirtualThreadPinned` → `orchestrator_virtual_thread_pinned_*`; desliga com `orchestrator.metrics.virtual-thread-pinning.enabled=false`) |
 | `integration/IntegrationExecutor` e `integration/IntegrationExecutorFactory` | Interface e seleção por `IntegrationType` (`HTTP`, `QUEUE`) |
 | `integration/http/HttpIntegrationExecutor` | HTTP com retry e circuit breaker; envia `X-Execution-Id` |
 | `integration/queue/*` | `QueueIntegrationExecutor` escolhe publisher por `QueueProvider` (`RABBITMQ`, `KAFKA`, `SQS`) |
 | `manager/*` | Cliente do Manager, login server-to-server (`ManagerAuthService`), cache e warm-up |
 | `domain/model/*`, `domain/execution/*` | Modelo do fluxo YAML, contexto e resultado da execução |
 | `security/*` | Chain da API (`SecurityConfig`, JWT stateless, `@Order(2)`), chain do actuator (`ActuatorSecurityConfig`, Basic, `@Order(1)`), login (`AuthController`, credencial por env) e `SecurityDefaultsGuard` |
+| `config/PlatformThreadPoolConfig`, `config/properties/OrchestratorThreadPoolProperties` | Pool da v2 (`orchestrator.platform-pool.*`, `PLATFORM_POOL_*`: core=max=200, fila 200, prefixo `orch-v2-`) e métricas |
 | `config/*` | Redis, resiliência, WebClient, instâncias Kafka/Rabbit/SQS e `config/properties/*` |
 | `exception/*`, `dto/*`, `filter/ExecutionMdcFilter` | Exceções e mapeamento HTTP, DTOs, `executionId` no MDC e no header |
 
@@ -70,7 +73,8 @@ Recursos: `src/main/resources/application.yml`, `application-docker.yml`, `docs/
 | Tipo de integração | `IntegrationType`, config em `domain/model`, `IntegrationExecutor` com `@Component` |
 | Retry e circuit breaker | `orch-integrations.retry-configuration` e `circuit-breaker-configuration` no `application.yml`; default em `config/properties/RetryConfigurationProperties` (500, 429, 408) |
 | `responseMapping` do HTTP e montagem do `FlowExecutionResult` | `service/ResultMapper` (usado por v1 e v2) |
-| Semântica de execução | `OrchestrationService` (v1, `runPhase` serve integrações e validações) e `OrchestrationV2Service` (v2, `executePhase`/`runStep`). Início e falha ficam em `ExecutionSupport`; mude v1 e v2 se a regra por passo for comum |
+| Semântica de execução | `OrchestrationService` (v1, `runPhase` serve integrações e validações) e `AbstractParallelOrchestrationService` (v2 e v3, `executePhase`/`runStep`). Início e falha ficam em `ExecutionSupport`; mude v1 e a base paralela se a regra por passo for comum |
+| Tamanho/política do pool da v2 | `orchestrator.platform-pool.*` e `config/PlatformThreadPoolConfig` |
 | Cache | TTL e warm-up em `orchestrator.cache.workflows.*`; invalidar por `CacheAdminController` ou `WorkflowCacheService.evict`/`evictAll` |
 | Auth com o Manager | `manager/ManagerAuthService`, `orchestrator.manager.*` |
 | Rota pública da API | `security/SecurityConfig` (chain JWT, `@Order(2)`) |
@@ -104,7 +108,10 @@ docker compose up -d && ./gradlew bootRun   # infra local e app
 - O `JwtAuthenticationFilter` fica só na chain da API (registro de servlet desligado em `SecurityConfig`); um Bearer não abre o actuator.
 - Testes que leem `/actuator/prometheus` com MockMvc precisam de `@AutoConfigureMetrics` (`org.springframework.boot.micrometer.metrics.test.autoconfigure`, starter `micrometer-metrics-test`) (o `@SpringBootTest` desliga o export de métricas).
 - Sem RestTemplate, sem banco, sem atualizar Java 21. O Spring Boot sobe só pelos marcos do plano de upgrade. Retry e circuit breaker ficam externalizados.
-- Virtual threads não herdam MDC nem contexto OTel: código paralelo novo precisa copiar os dois (`OrchestrationV2Service.executeGroupParallel`).
+- Threads filhas (virtuais ou do pool) não herdam MDC nem contexto OTel: código paralelo novo precisa copiar os dois (`AbstractParallelOrchestrationService.runWithContext`). O pool da v2 reaproveita threads: `runWithContext` restaura o MDC anterior da thread (limpa em pool; preserva o da request sob CallerRuns). Não use `MDC.clear()` direto na tarefa.
+- Saturação do pool v2: fila limitada + `CallerRunsPolicy`. Pool e fila cheios fazem a tarefa rodar na thread da request (sem erro, degrada para serial; contador `orchestrator.platform.pool.caller.runs`). Tarefa do pool nunca pode submeter ao próprio pool (risco de deadlock). Métricas do pool: `executor_*{name="orchestrator-v2"}`. A v3 não tem limite de concorrência.
+- Circuit breaker e retry são por `id` de integração e o estado é compartilhado entre v1, v2 e v3 e entre execuções: sob sobrecarga o breaker abre e contamina a execução seguinte. Em benchmark, reinicie o orquestrador entre cenários e acompanhe `resilience4j_circuitbreaker_state` e `not_permitted_calls`.
+- Com log DEBUG (`LOG_LEVEL_APP`) o Logback síncrono prende virtual threads na v3 (evento JFR `jdk.VirtualThreadPinned`, métrica `orchestrator_virtual_thread_pinned_*`). Em carga use INFO ou um appender assíncrono.
 - Circuito aberto (`CallNotPermittedException`) não é retentado.
 - Os registries de Retry e CircuitBreaker devolvem instâncias singleton por integração: listeners de eventos entram uma vez, em `config/HttpResilienceConfig` (`onEntryAdded`), nunca a cada execução em `HttpIntegrationExecutor` (acumulava consumers e duplicava logs).
 - Testcontainers 1.x com Docker Engine 29 ou mais novo falhava ao iniciar o cliente Docker. O `build.gradle.kts` fixa `api.version=1.44` nos testes; ao subir a versão do Testcontainers, reavalie.
