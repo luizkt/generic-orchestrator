@@ -13,7 +13,7 @@ atualizado-em: 2026-11-14
 
 Executa fluxos YAML: valida o contrato do payload, roda integrações (HTTP e filas), roda validações, devolve resultado consolidado. Não persiste nada e não faz CRUD de workflows (isso é do `service-portal-manager`): busca o YAML no Manager e cacheia no Redis (TTL 1h).
 
-<!-- gen:size -->Tamanho: 75 arquivos .java em `src/main`, 36 em `src/test`.<!-- /gen:size -->
+<!-- gen:size -->Tamanho: 76 arquivos .java em `src/main`, 36 em `src/test`.<!-- /gen:size -->
 
 Stack: Java 21, Spring Boot 4.1.2 (plano de upgrade concluído em `../docs/plans/PLAN-spring-boot-upgrade.md`; próximas subidas seguem o mesmo método, uma linha por vez), Gradle Kotlin DSL, WebClient (nunca RestTemplate), Redis, RabbitMQ/Kafka/SQS, Resilience4j `Retry(CircuitBreaker(call))`, JWT HS512 stateless. Porta `SERVER_PORT` (8080).
 
@@ -58,7 +58,7 @@ Base: `src/main/java/com/orchestrator/`.
 | `domain/model/*`, `domain/execution/*` | Modelo do fluxo YAML, contexto e resultado da execução |
 | `security/*` | Chain da API (`SecurityConfig`, JWT stateless, `@Order(2)`), chain do actuator (`ActuatorSecurityConfig`, Basic, `@Order(1)`), login (`AuthController`, credencial por env) e `SecurityDefaultsGuard` |
 | `config/PlatformThreadPoolConfig`, `config/properties/OrchestratorThreadPoolProperties` | Pool da v2 (`orchestrator.platform-pool.*`, `PLATFORM_POOL_*`: core=max=200, fila 200, prefixo `orch-v2-`) e métricas |
-| `config/*` | Redis, resiliência, WebClient, instâncias Kafka/Rabbit/SQS e `config/properties/*` |
+| `config/*` | `ActuatorObservationConfig` (tira `/actuator` de `http_server_requests`), Redis, resiliência, WebClient, instâncias Kafka/Rabbit/SQS e `config/properties/*` |
 | `exception/*`, `dto/*`, `filter/ExecutionMdcFilter` | Exceções e mapeamento HTTP, DTOs, `executionId` no MDC e no header |
 
 Recursos: `src/main/resources/application.yml`, `application-docker.yml`, `docs/example-flow.yml` (5 tipos de integração), `docs/features/feature_{1,2,3}.md`.
